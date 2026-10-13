@@ -1,0 +1,28 @@
+{
+  "name": "@aladine/agent-gateway",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Agent Gateway for Aladine: sessions, provider adapters, MCP client and human-approved patches",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning src/index.ts",
+    "dev": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env --watch src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "node --disable-warning=ExperimentalWarning --test --test-concurrency=1 'test/**/*.test.ts'"
+  },
+  "license": "AGPL-3.0-only",
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.133.0",
+    "@modelcontextprotocol/sdk": "^1.32.1",
+    "diff": "^9.0.0",
+    "fastify": "^5.12.7",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "typescript": "^7.0.2"
+  }
+}
