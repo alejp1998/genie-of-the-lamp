@@ -172,6 +172,8 @@ Running dev log for the MVP in `ALDINE_AGENT_FORK_SPEC.md` (task brief:
 - 2026-10-13 — **LaTeX Genie branding** in the app (`apps/web/src/brand.tsx`); About's source link now points at this fork. **Assistant controls:** no header toggle; a sidebar foot bar ("below" layout); a divider hide button and a right-edge tab ("right" layout).
 - Tests at end of day: gateway 68/68, web unit 89/89, assistant e2e 13/13; upstream specs touched today (01, 05–07, 09, 10, 16–18, 20, 21, 27, 30, 36 and the file-tree group) all pass; MCP suite passes.
 
+- 2026-10-13 — **Chat history recall:** Up/Down in the chat box, shell-style (`assistant/chatHistory.ts`, localStorage `genie.chatHistory`, the last 100, deduplicated); assistant e2e 14/14.
+
 ### Next
 - Live-check `/bibcheck` once DBLP stops throttling this host (it answers 202/429 here today).
 - Optional: cited-first ordering of source cards.

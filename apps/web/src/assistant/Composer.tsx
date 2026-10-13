@@ -1,4 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import { loadHistory, pushHistory } from './chatHistory';
 import { copyLabel, editorOrigin } from './editorClipboard';
 import { openVirtualDoc } from '../components/VirtualDocs';
 import type { Attachment, EditorContext, GatewayConfig } from './api';
@@ -87,6 +88,8 @@ const Composer = forwardRef<ComposerHandle, Props>(function Composer({ config, c
   const input = useRef<HTMLTextAreaElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const pastes = useRef(0);
+  /** Up/Down recall: the position in the history while browsing it, and the draft to come back to. */
+  const recall = useRef<{ index: number; draft: string } | null>(null);
 
   const attachSelection = (sel = ctx.selection) => {
     if (!sel) return;
@@ -156,6 +159,8 @@ const Composer = forwardRef<ComposerHandle, Props>(function Composer({ config, c
   const submit = async (value = text) => {
     const v = value.trim();
     if (!v || running) return;
+    pushHistory(v);
+    recall.current = null;
     if (await onSend(v, pending)) { setText(''); setPending([]); setMenu(null); }
   };
 
@@ -196,6 +201,22 @@ const Composer = forwardRef<ComposerHandle, Props>(function Composer({ config, c
               if (e.key === 'Escape') { e.preventDefault(); setMenu(null); return; }
             }
             if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit(); }
+            // Up on the first line goes back through the messages sent from this browser, Down comes forward.
+            if ((e.key === 'ArrowUp' || e.key === 'ArrowDown') && !e.shiftKey && !e.altKey && !e.metaKey && !e.ctrlKey) {
+              const el = e.currentTarget;
+              const history = loadHistory();
+              const up = e.key === 'ArrowUp';
+              const onEdge = up ? !el.value.slice(0, el.selectionStart).includes('\n') : !el.value.slice(el.selectionEnd).includes('\n');
+              if (!onEdge || !history.length || (!up && !recall.current)) return;
+              const cur = recall.current ?? { index: history.length, draft: el.value };
+              const next = cur.index + (up ? -1 : 1);
+              if (next < 0) { e.preventDefault(); return; }
+              e.preventDefault();
+              const value = next >= history.length ? cur.draft : history[next];
+              recall.current = next >= history.length ? null : { index: next, draft: cur.draft };
+              setText(value);
+              requestAnimationFrame(() => el.setSelectionRange(value.length, value.length));
+            }
           }}
           onPaste={(e) => {
             // Files copied in a file manager or a screenshot tool arrive as files.

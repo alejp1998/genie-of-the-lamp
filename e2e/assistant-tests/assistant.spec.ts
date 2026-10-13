@@ -425,3 +425,25 @@ test('text copied in the editor pastes into the chat box as a file:lines referen
   await page.keyboard.press('ControlOrMeta+v');
   await expect(page.getByTestId('assistant-input')).toHaveValue('a note from somewhere else entirely');
 });
+
+test('Up and Down recall the messages sent from this browser, then the draft', async ({ page }) => {
+  await signUp(page.request, 'Ada');
+  const id = await newProject(page.request);
+  await openAssistant(page, id);
+  await ask(page, 'first question');
+  await ask(page, 'second question');
+  const box = page.getByTestId('assistant-input');
+  await box.fill('a draft');
+  await box.press('ArrowUp');
+  await expect(box).toHaveValue('second question');
+  await box.press('ArrowUp');
+  await expect(box).toHaveValue('first question');
+  await box.press('ArrowDown');
+  await expect(box).toHaveValue('second question');
+  await box.press('ArrowDown');
+  await expect(box).toHaveValue('a draft');
+  // Kept in the browser: still there after a reload.
+  await page.reload();
+  await page.getByTestId('assistant-input').press('ArrowUp');
+  await expect(page.getByTestId('assistant-input')).toHaveValue('second question');
+});

@@ -33,6 +33,9 @@ All notable changes to Aldine are documented here. The format follows
   preview, switched from the panel header or the settings. The file tree
   drops its "Drop files here" box: files dropped anywhere on the panel upload,
   with a faint tint while they hover.
+- Chat history (Genie of the Lamp fork): Up on the first line of the assistant's box recalls the
+  messages sent from this browser, Down comes forward and back to the draft
+  (kept in localStorage, the last 100).
 - LaTeX Genie branding (Genie of the Lamp fork): tab title (with the project name) and favicon,
   the genie wordmark on the home, sign-in, onboarding and consent pages, and
   an About dialog that offers this fork's source (AGPL §13).
