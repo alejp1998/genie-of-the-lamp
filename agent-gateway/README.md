@@ -81,6 +81,12 @@ All settings are environment variables in `agent-gateway/.env` (see `.env.exampl
 | `ALDINE_MCP_TOKEN` | — | Only for an Aldine **without accounts** (`AUTH_ENABLED` off). Set the same value on the app. Every user then acts as the operator, so per-user privacy does not apply. |
 | `AGENT_GATEWAY_BASE_PATH` | `/agent-gateway` | Mount point. With `ALDINE_BASE_PATH=/x`, set `/x/agent-gateway` and adjust the Caddyfile. |
 | `AGENT_DATA_DIR` | `.data` | SQLite: `gateway.db` (chats, runs, proposals) and `audit.db` (audit log). |
+| `AGENT_RESEARCH` | on | `0` removes the research tools (literature search, paper reading, web search, page reading). |
+| `AGENT_RESEARCH_EMAIL` | — | Contact address sent to OpenAlex; puts the gateway in its faster "polite pool". |
+| `SEARXNG_URL` | `http://searxng:8080` in the overlay | Your own SearXNG with the JSON format on. Unset: no `web_search`. |
+| `SEARXNG_SECRET` | placeholder | SearXNG's secret key; set a long random string. |
+| `AGENT_FETCH` | on | `0` stops the assistant reading web pages and open-access PDFs. |
+| `OPENALEX_BASE_URL` / `ARXIV_BASE_URL` | public APIs | Alternative endpoints, e.g. a mirror or a test server. |
 
 The app side of the overlay sets the Aldine variables it needs:
 - `AUTH_ENABLED=1`
@@ -135,6 +141,14 @@ Every tool the model gets is read-only or compile-only:
 - `list_citations`, `list_labels`, `list_comments`
 - `view_image`
 
+With research on, it also gets tools that reach outside the project, all free and keyless:
+- `search_literature`: OpenAlex (about 250 million works, with venues and citation counts) and arXiv, merged and de-duplicated;
+- `get_paper`: one work by DOI or arXiv id, optionally reading its open-access full text;
+- `web_search`: the general web through the bundled SearXNG (a private metasearch engine; no account, no API key);
+- `fetch_url`: the readable text of a page or online PDF, with any scholarly citation metadata.
+
+The panel shows what the assistant consulted as numbered source cards, and a paper card has **Cite**. A proposal can carry `add_references`: on Accept, those entries go through Aldine's `references_add`, which looks each DOI or arXiv id up and writes clean BibTeX to the project's `.bib` before the `\cite` lands. The panel's `/factcheck`, `/references` and `/related` commands, and **Check** on a selection, drive these tools.
+
 **The model has no write tool.** Its only route to a change is `propose_patch`, which validates quote anchors with Aldine's rules against the current text and stores a proposal with a unified diff.
 
 ### Accept
@@ -172,6 +186,7 @@ Chats are private to their owner. **Share with project collaborators** makes one
   - Mutations require an `X-Aladine-Request: 1` header and a same-origin `Sec-Fetch-Site`, on top of `SameSite=Lax` cookies.
 - **Writes.** Only a person's Accept writes, and only after anchor and version checks. The audit log (`audit.db`, kept apart from chat content) records every tool call with its tool name, argument hash, status and duration, plus every run, proposal decision, share change and comment answer. Cookies and tokens are redacted from the logs.
 - **Limits.** Steps, compiles, tool and run time, result sizes, attachment sizes and counts (4 images up to 5 MB each, 3 PDFs up to 20 MB each), and a bounded chain of automatic continuations.
+- **Outbound requests.** The research tools fetch only `http(s)` URLs that resolve to public addresses. The check runs on the address actually connected to, which also defeats DNS rebinding. Redirects are re-checked at every hop, and each request has a 15 s time limit and a 10 MB size limit. Fetched text is labelled to the model as untrusted evidence, never instructions. Only the search queries and URLs leave the server, never project text. SearXNG runs on the internal network and is never published. arXiv requests go one at a time, 3 s apart, as arXiv asks.
 - **Compiler.** Unchanged from Aldine: no egress, capabilities dropped, memory and PID limits.
 
 ## Development and tests

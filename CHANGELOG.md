@@ -21,6 +21,12 @@ All notable changes to Aldine are documented here. The format follows
   assistant can answer review comments one by one, replying and resolving each
   on Accept. Attachments: `@` file references, pasted or dropped text files,
   PDFs and screenshots.
+- Assistant research tools (Aladine fork): literature search on OpenAlex and
+  arXiv, open-access full-text reading, web search through a bundled private
+  SearXNG, and reading links, all behind SSRF-safe fetching. Answers show
+  their sources as cards. A proposal can add BibTeX entries (via
+  `references_add`) together with its `\cite`. New `/factcheck`,
+  `/references` and `/related` commands, and Check on a selection.
 - Find in the PDF preview (Ctrl/Cmd+F, or Find in the preview header).
 - Images and PDFs in the file tree open as previews in the editor area.
 - The selection toolbar offers Comment; the comment dialog shows the commented

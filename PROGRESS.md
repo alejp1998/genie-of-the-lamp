@@ -132,6 +132,13 @@ Running dev log for the MVP in `ALDINE_AGENT_FORK_SPEC.md` (task brief:
   - assistant e2e 8/8;
   - Aldine full e2e 164/164 at the Phase 4 commit (rerun result below).
 
+- 2026-10-13 — **Research, done.** Everything uses free, open sources (Scite was considered and rejected: it is paid, has no general web search, and the university has no data processing agreement with it).
+  - Tools: `search_literature` (OpenAlex + arXiv, merged), `get_paper` (with open-access full text), `web_search` (bundled SearXNG), `fetch_url` (HTML and PDF). All of them go through SSRF-safe fetching.
+  - `add_references` on proposals, applied via `references_add` on Accept.
+  - Panel: source cards with Cite; `/factcheck`, `/references`, `/related`; **Check** on a selection.
+  - Chat text now uses the editor's size (13.5 px); secondary text is 12–12.5 px.
+  - Verified live with Haiku: OpenAlex papers, SearXNG results and a page read from dji.com, all shown as source cards. arXiv rate-limited this host (429), and the search fell back to OpenAlex with a note.
+
 ### In progress
 - Nothing.
 
@@ -144,7 +151,6 @@ Running dev log for the MVP in `ALDINE_AGENT_FORK_SPEC.md` (task brief:
   - `propose_patch` over a gateway MCP endpoint, so Claude Code can stage changes for review in the panel;
   - word-level diffs in Aldine's History dialog;
   - proposed changes shown inline in the editor (decorations with accept/reject);
-  - bibliography search and citation validation tools;
   - named checkpoints before multi-step edits.
 
 ## Dev environment (this host)

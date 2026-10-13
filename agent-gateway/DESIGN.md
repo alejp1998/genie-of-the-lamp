@@ -177,6 +177,8 @@ agent-gateway/
 | `get_compile_status`, `compile` | read / compile (capped) |
 | `list_citations`, `list_labels`, `list_comments` | read |
 | `view_image` | read (image to the model) |
+| `search_literature`, `get_paper` | external read: OpenAlex, arXiv, open-access full text |
+| `web_search`, `fetch_url` | external read: bundled SearXNG; public http(s) pages and PDFs (SSRF-guarded) |
 | `propose_patch` | stores a proposal: edits, new files, comment answers, `continue_after_review` |
 
 No write tool reaches the model; writes happen only on a person's Accept.
