@@ -105,7 +105,52 @@ docker compose -f docker-compose.yml -f docker-compose.agent.yml up -d --build
 
 Open [localhost:8080](http://localhost:8080), sign up, create or import a project and click **Assistant**. [`agent-gateway/README.md`](agent-gateway/README.md) covers configuration, binding to a network address, TLS, Claude Code over MCP, the security model and operations.
 
-Plain `docker compose up -d` still runs upstream Aldine on its own, without the assistant.
+### Aldine only (upstream images, no assistant)
+
+Plain `docker compose up -d` runs upstream Aldine on its own. It is the same as saving this as `docker-compose.yml`:
+
+```yaml
+name: aldine
+
+services:
+  app:
+    image: ghcr.io/trahloff/aldine-app:${ALDINE_VERSION:-0.11.0}
+    ports:
+      - "8080:3000"
+    volumes:
+      - aldine-data:/data
+      - aldine-secrets:/secrets
+    networks: [frontend, backend]
+    init: true
+    restart: unless-stopped
+
+  compiler:
+    image: ghcr.io/trahloff/aldine-compiler:${ALDINE_VERSION:-0.11.0}${ALDINE_TEXLIVE:-}
+    volumes:
+      - aldine-data:/data
+    # The compiler runs untrusted LaTeX. Keep this block.
+    networks: [backend]
+    mem_limit: 2g
+    pids_limit: 256
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges]
+    init: true
+    restart: unless-stopped
+
+networks:
+  frontend: {}
+  backend:
+    internal: true # no route to the internet
+
+volumes:
+  aldine-data:
+  aldine-secrets:
+```
+
+Open http://localhost:8080. That's it. Projects live in the `aldine-data`
+volume, and everything else (auth, SSO, AI fix, email) is opt-in via
+environment variables when you want it.
+
 
 ### Development
 

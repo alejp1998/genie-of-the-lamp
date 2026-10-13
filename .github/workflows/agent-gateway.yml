@@ -1,0 +1,32 @@
+name: Agent Gateway
+
+on:
+  push:
+    branches: [main]
+    paths: ['agent-gateway/**', '.github/workflows/agent-gateway.yml']
+  pull_request:
+    paths: ['agent-gateway/**', '.github/workflows/agent-gateway.yml']
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Typecheck & tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: agent-gateway
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          # node:sqlite and TypeScript type stripping need Node 24
+          node-version: 24
+          cache: npm
+          cache-dependency-path: agent-gateway/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+        env:
+          LOG_LEVEL: silent
