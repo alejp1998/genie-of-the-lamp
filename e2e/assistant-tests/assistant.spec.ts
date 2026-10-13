@@ -134,3 +134,124 @@ test('chats are private until shared; a shared chat is read-only for collaborato
   await alice.close();
   await bob.close();
 });
+
+/** A one-page PDF with real text, built by hand so the suite needs no TeX. */
+function tinyPdf(text: string): Buffer {
+  const objs = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 200] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>',
+    '', // content stream, filled below
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+  ];
+  const stream = `BT /F1 18 Tf 30 120 Td (${text}) Tj ET`;
+  objs[3] = `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`;
+  let out = '%PDF-1.4\n';
+  const offsets: number[] = [];
+  objs.forEach((o, i) => { offsets.push(out.length); out += `${i + 1} 0 obj\n${o}\nendobj\n`; });
+  const xref = out.length;
+  out += `xref\n0 ${objs.length + 1}\n0000000000 65535 f \n${offsets.map((o) => `${String(o).padStart(10, '0')} 00000 n \n`).join('')}`;
+  out += `trailer\n<< /Size ${objs.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF\n`;
+  return Buffer.from(out, 'latin1');
+}
+
+const PNG = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAYAAABytg0kAAAAFklEQVR4nGP8z8DAwMDAxMDAwMAAAA0vAQPd0v8iAAAAAElFTkSuQmCC', 'base64');
+
+async function putBinary(request: APIRequestContext, id: string, path: string, data: Buffer) {
+  const r = await request.put(`/api/projects/${id}/file`, { data: { path, content: data.toString('base64'), encoding: 'base64', branch: 'main' } });
+  expect(r.ok(), await r.text()).toBeTruthy();
+}
+
+test('project images and PDFs open as previews; find works in a PDF', async ({ page }) => {
+  await signUp(page.request, 'Ada');
+  const id = await newProject(page.request);
+  await putBinary(page.request, id, 'figures/dot.png', PNG);
+  await putBinary(page.request, id, 'figures/plot.pdf', tinyPdf('Swarm recall curve'));
+  await page.goto(`/p/${id}?file=intro.tex`);
+  await page.getByTestId('editor-shell').waitFor();
+  await page.getByTestId('source-only').click(); // the tree hides non-source files by default
+  await page.getByTestId('file-figures/dot.png').click();
+  await expect(page.getByTestId('file-preview')).toHaveAttribute('data-kind', 'image');
+  await expect(page.getByTestId('file-preview-image')).toBeVisible();
+  await page.getByTestId('file-figures/plot.pdf').click();
+  await expect(page.getByTestId('file-preview')).toHaveAttribute('data-kind', 'pdf');
+  await expect(page.locator('[data-testid="file-preview"] .pdf-page')).toHaveCount(1);
+  await page.getByTestId('file-preview-find').click();
+  await page.locator('[data-testid="file-preview"] [data-testid="pdf-find-input"]').fill('recall');
+  await expect(page.locator('[data-testid="file-preview"] [data-testid="pdf-find-count"]')).toHaveText('1 of 1');
+  await expect(page.locator('[data-testid="file-preview"] .pdf-hit')).toHaveCount(1);
+  // Back to source: the editor is there again.
+  await page.getByTestId('file-intro.tex').click();
+  await expect(page.locator('.cm-content')).toContainText('Swarm robotics');
+});
+
+test('attachments: pasted text, a dropped file and a PDF reach the model and open as tabs', async ({ page }) => {
+  await signUp(page.request, 'Ada');
+  const id = await newProject(page.request);
+  await openAssistant(page, id);
+  // A long paste becomes an attachment instead of filling the box.
+  const long = Array.from({ length: 40 }, (_, i) => `Reviewer note ${i + 1}: the intro is vague.`).join('\n');
+  await page.getByTestId('assistant-input').click();
+  await page.evaluate((t) => {
+    const dt = new DataTransfer();
+    dt.setData('text/plain', t);
+    document.querySelector('[data-testid=assistant-input]')!.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
+  }, long);
+  // Drop a text file and a PDF on the panel.
+  await page.evaluate((pdfB64) => {
+    const dt = new DataTransfer();
+    dt.items.add(new File(['x = 1\nprint(x)\n'], 'check.py', { type: 'text/x-python' }));
+    dt.items.add(new File([Uint8Array.from(atob(pdfB64), (c) => c.charCodeAt(0))], 'review.pdf', { type: 'application/pdf' }));
+    const el = document.querySelector('[data-testid=assistant-panel]')!;
+    for (const type of ['dragenter', 'dragover', 'drop']) el.dispatchEvent(new DragEvent(type, { dataTransfer: dt, bubbles: true, cancelable: true }));
+  }, tinyPdf('Reviewer two asks for ablations').toString('base64'));
+  const chips = page.locator('.assistant__composer [data-testid=assistant-attachment]');
+  await expect(chips).toHaveCount(3);
+  await expect(chips).toContainText(['Pasted text 1', 'check.py', 'review.pdf']);
+  // A binary that is none of these is refused by name.
+  await page.evaluate(() => {
+    const dt = new DataTransfer();
+    dt.items.add(new File([new Uint8Array([0, 1, 2, 0, 255])], 'blob.bin', { type: 'application/octet-stream' }));
+    const el = document.querySelector('[data-testid=assistant-panel]')!;
+    for (const type of ['dragenter', 'dragover', 'drop']) el.dispatchEvent(new DragEvent(type, { dataTransfer: dt, bubbles: true, cancelable: true }));
+  });
+  await expect(page.getByTestId('assistant-error')).toContainText('blob.bin is not a text file, PDF or image');
+  await ask(page, 'Summarize the attachments');
+  const sent = page.locator('.assistant__user').last().getByTestId('assistant-attachment');
+  await expect(sent).toHaveCount(3);
+  // Stored on the gateway: the PDF went with its extracted text.
+  const sessions = await (await page.request.get(`/agent-gateway/projects/${id}/sessions`)).json();
+  const detail = await (await page.request.get(`/agent-gateway/sessions/${sessions.sessions[0].id}`)).json();
+  const blocks = detail.messages[0].blocks;
+  expect(blocks.find((b: any) => b.type === 'document')).toMatchObject({ name: 'review.pdf', hasText: true });
+  expect(blocks.filter((b: any) => b.attachment?.kind === 'text').map((b: any) => b.attachment.name)).toEqual(['Pasted text 1', 'check.py']);
+  // Chips open as read-only tabs beside the file.
+  await sent.filter({ hasText: 'check.py' }).locator('.assistant__chip-open').click();
+  await expect(page.getByTestId('virtual-doc')).toContainText('print(x)');
+  await sent.filter({ hasText: 'review.pdf' }).locator('.assistant__chip-open').click();
+  await expect(page.locator('[data-testid=virtual-doc] .pdf-page')).toHaveCount(1);
+  await expect(page.getByTestId('vtab')).toHaveCount(2);
+  await page.getByTestId('vtab-file').click();
+  await expect(page.locator('.cm-content')).toContainText('Swarm robotics');
+});
+
+test('@ references and the selection toolbar fill the composer without editing anything', async ({ page }) => {
+  await signUp(page.request, 'Ada');
+  const id = await newProject(page.request);
+  await openAssistant(page, id);
+  await page.getByTestId('assistant-input').pressSequentially('Compare with @mai');
+  await expect(page.getByTestId('assistant-file-menu')).toContainText('main.tex');
+  await page.getByTestId('assistant-input').press('Enter');
+  await expect(page.locator('.assistant__composer [data-testid=assistant-attachment]')).toContainText('main.tex');
+  await expect(page.getByTestId('assistant-input')).toHaveValue('Compare with ');
+  await page.getByTestId('assistant-input').fill('/imp');
+  await expect(page.getByTestId('assistant-slash-menu')).toContainText('/improve');
+  await page.getByTestId('assistant-input').press('Enter');
+  await expect(page.getByTestId('assistant-input')).toHaveValue(/Improve the wording/);
+  // Selection toolbar in the editor.
+  await page.locator('.cm-line', { hasText: 'Swarm robotics is a field of study.' }).click({ clickCount: 3 });
+  await page.getByTestId('sel-explain').click();
+  await expect(page.getByTestId('assistant-input')).toHaveValue('Explain the selected text in plain words.');
+  await expect(page.locator('.assistant__composer [data-testid=assistant-attachment]')).toContainText(['intro.tex:2']);
+  expect(await fileContent(page.request, id, 'intro.tex')).toBe(INTRO);
+});
