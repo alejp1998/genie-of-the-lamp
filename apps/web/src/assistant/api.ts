@@ -137,7 +137,9 @@ export const gateway = {
   /** null when no gateway is deployed next to this Aldine: the assistant then stays out of the UI. */
   async probe(): Promise<GatewayConfig | null> {
     try {
-      return await call<GatewayConfig>('/config');
+      // Without a gateway, Aldine's app fallback answers this path with its HTML page (200).
+      const c = await call<Partial<GatewayConfig>>('/config');
+      return c && typeof c.agentLabel === 'string' && Array.isArray(c.models) && c.user ? (c as GatewayConfig) : null;
     } catch {
       return null;
     }
