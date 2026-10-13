@@ -3,7 +3,7 @@ import { AldineToolError } from '../aldine/types.ts';
 import type { Limits } from '../config.ts';
 import { addUsage, type Block, type ChatMessage, emptyUsage, type Provider, type Usage } from '../providers/types.ts';
 import type { AuditEntry, RunStatus } from '../store/types.ts';
-import { type AgentTool, type ToolContext, toolSpecs } from './tools.ts';
+import { type AgentTool, isMediaResult, type ToolContext, toolSpecs } from './tools.ts';
 
 export type Emit = (type: string, data: unknown) => void;
 
@@ -77,11 +77,12 @@ async function executeCall(call: Extract<Block, { type: 'tool_call' }>, d: LoopD
   try {
     if (d.signal.aborted) throw Object.assign(new Error('cancelled'), { name: 'AbortError' });
     const result = await withTimeout(tool.run(parsed.data, d.toolCtx, { id: call.id }), d.limits.toolTimeoutMs, tool.name);
-    const content = clip(JSON.stringify(result), d.limits.maxToolResultChars);
+    const media = isMediaResult(result) ? result : null;
+    const content = media ? media.text : clip(JSON.stringify(result), d.limits.maxToolResultChars);
     const durationMs = Date.now() - started;
-    d.emit('tool_end', { id: call.id, name: tool.name, ok: true, summary: tool.summarize(result), durationMs, output: clip(content, 4000) });
+    d.emit('tool_end', { id: call.id, name: tool.name, ok: true, summary: tool.summarize(result), durationMs, output: clip(content, 4000), ...(media ? { images: media.images.length } : {}) });
     d.audit({ action: 'tool_call', tool: tool.name, argsHash: argsHash(parsed.data), status: 'ok', durationMs });
-    return { type: 'tool_result', id: call.id, content };
+    return { type: 'tool_result', id: call.id, content, ...(media ? { images: media.images } : {}) };
   } catch (err) {
     const durationMs = Date.now() - started;
     const cancelled = isAbort(err, d.signal);

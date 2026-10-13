@@ -21,11 +21,20 @@ export function toOpenAIMessages(system: string, messages: ChatMessage[], vision
       continue;
     }
     // Tool results must directly follow the assistant tool_calls; any user text comes after them.
+    const toolImages: { mediaType: string; data: string; name?: string }[] = [];
     for (const b of m.blocks) {
-      if (b.type === 'tool_result') out.push({ role: 'tool', tool_call_id: b.id, content: b.isError ? `ERROR: ${b.content}` : b.content });
+      if (b.type === 'tool_result') {
+        out.push({ role: 'tool', tool_call_id: b.id, content: b.isError ? `ERROR: ${b.content}` : b.content });
+        // Chat Completions tool messages carry text only; what a tool showed follows as a user turn.
+        for (const im of b.images ?? []) toolImages.push({ ...im, name: 'tool image' });
+      }
     }
-    const text = m.blocks.filter((b) => b.type === 'text').map((b) => (b as { text: string }).text).join('\n\n');
-    const images = m.blocks.filter((b): b is Extract<Block, { type: 'image' }> => b.type === 'image');
+    const docs = m.blocks.filter((b): b is Extract<Block, { type: 'document' }> => b.type === 'document');
+    const text = [
+      ...m.blocks.filter((b) => b.type === 'text').map((b) => (b as { text: string }).text),
+      ...docs.map((d) => (d.text ? `<attached_pdf name="${d.name ?? 'document.pdf'}">\n${d.text}\n</attached_pdf>` : `[PDF “${d.name ?? 'document'}” attached; no text could be extracted and this model cannot read PDFs.]`)),
+    ].join('\n\n');
+    const images = [...m.blocks.filter((b): b is Extract<Block, { type: 'image' }> => b.type === 'image'), ...toolImages.map((im) => ({ type: 'image' as const, ...im }))];
     if (images.length && vision) {
       out.push({ role: 'user', content: [...(text ? [{ type: 'text' as const, text }] : []), ...images.map((im) => ({ type: 'image_url' as const, image_url: { url: `data:${im.mediaType};base64,${im.data}` } }))] });
     } else {

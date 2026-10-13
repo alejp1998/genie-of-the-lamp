@@ -4,7 +4,7 @@ import { IconSpark, IconX } from '../components/Icons';
 import { openVirtualDoc } from '../components/VirtualDocs';
 import { useExitGhost } from '../exitGhost';
 import type { EditorContext, GatewayConfig } from './api';
-import Composer, { Chips, type Pending, type Prefill } from './Composer';
+import Composer, { Chips, type ComposerHandle, type Pending, type Prefill } from './Composer';
 import Markdown from './Markdown';
 import ProposalCard from './ProposalCard';
 import type { Item } from './transcript';
@@ -71,6 +71,11 @@ function ToolLine({ item }: { item: Extract<Item, { kind: 'tool' }> }) {
           {item.output && <button className="assistant__link" onClick={() => openToolOutput(item)} data-testid="assistant-tool-open">Open in editor</button>}
         </div>
         {item.input !== undefined && <pre>{pretty(item.input)}</pre>}
+        {item.images?.map((src, i) => (
+          <button key={src} className="assistant__tool-img" onClick={() => openVirtualDoc({ id: `toolimg:${item.id}:${i}`, title: `${String((item.input as { path?: string })?.path ?? 'Image')} (as viewed)`, kind: 'image', src })} title="Open in the editor area">
+            <img src={src} alt="" />
+          </button>
+        ))}
         {item.output && <><div className="assistant__details-label">Result</div><pre>{pretty(item.output)}</pre></>}
       </div>
     </details>
@@ -134,6 +139,9 @@ export default function AssistantPanel({ projectId, config, getContext, onClose,
   const bodyRef = useRef<HTMLDivElement>(null);
   const headerRef = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
+  const composer = useRef<ComposerHandle>(null);
+  const [dropping, setDropping] = useState(false);
+  const dragDepth = useRef(0);
   const leave = useExitGhost();
 
   // The context chip follows the editor while the panel is open.
@@ -174,7 +182,22 @@ export default function AssistantPanel({ projectId, config, getContext, onClose,
   const cards: CardHooks = { proposals: a.proposals, canDecide: !readOnly, accept: a.accept, reject: a.reject, ask: (t) => void send(t), onShowHistory };
 
   return (
-    <aside className="pane assistant" data-testid="assistant-panel" aria-label={`${config.agentLabel} assistant`}>
+    <aside
+      className={`pane assistant${dropping ? ' assistant--drop' : ''}`}
+      data-testid="assistant-panel"
+      aria-label={`${config.agentLabel} assistant`}
+      onDragEnter={(e) => { if (!readOnly && e.dataTransfer.types.includes('Files')) { dragDepth.current++; setDropping(true); } }}
+      onDragOver={(e) => { if (!readOnly && e.dataTransfer.types.includes('Files')) e.preventDefault(); }}
+      onDragLeave={() => { if (--dragDepth.current <= 0) { dragDepth.current = 0; setDropping(false); } }}
+      onDrop={(e) => {
+        dragDepth.current = 0;
+        setDropping(false);
+        if (readOnly || !e.dataTransfer.files.length) return;
+        e.preventDefault();
+        void composer.current?.addFiles(e.dataTransfer.files);
+      }}
+    >
+      {dropping && <div className="assistant__dropzone" aria-hidden="true">Drop text files, PDFs or images to attach</div>}
       <div className="pane__header assistant__header" ref={headerRef}>
         <span className="assistant__mark" aria-hidden="true"><IconSpark /></span>
         <button
@@ -280,6 +303,7 @@ export default function AssistantPanel({ projectId, config, getContext, onClose,
 
       {!readOnly && (
         <Composer
+          ref={composer}
           config={config}
           ctx={ctx}
           files={getFiles()}

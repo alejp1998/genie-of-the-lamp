@@ -217,7 +217,14 @@
 .proposal__textarea { width: 100%; height: auto; padding: 6px 8px; font: var(--text-s) / 1.45 var(--font-mono); resize: vertical; }
 
 /* composer: attachments, @ and / menus, drop target */
-.assistant__composer--drop { outline: 2px dashed var(--accent); outline-offset: -4px; }
+/* Drop anywhere on the panel */
+.assistant__dropzone {
+  position: absolute; inset: 6px; z-index: 20; display: flex; align-items: center; justify-content: center; text-align: center; padding: 20px;
+  border: 2px dashed var(--accent); border-radius: var(--radius-l); background: color-mix(in srgb, var(--bg-panel) 88%, var(--accent));
+  color: var(--accent); font-weight: 600; pointer-events: none;
+}
+.assistant__tool-img { display: block; margin: 4px 0; padding: 0; border: 1px solid var(--hairline); border-radius: var(--radius-s); background: none; cursor: zoom-in; }
+.assistant__tool-img img { display: block; max-width: 100%; max-height: 160px; border-radius: var(--radius-s); }
 .assistant__context-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .assistant__link { border: 0; background: none; padding: 0; color: var(--accent); font: var(--text-xs) var(--font-ui); cursor: pointer; flex: none; }
 .assistant__link:hover { text-decoration: underline; }

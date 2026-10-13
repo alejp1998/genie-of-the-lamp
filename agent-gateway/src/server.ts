@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { Attachment, ClientContext, MAX_IMAGES } from './agent/context.ts';
+import { Attachment, ClientContext, MAX_IMAGES, MAX_PDFS } from './agent/context.ts';
 import { sessionCookie } from './aldine/http.ts';
 import type { AldineApi, Identity, ProjectInfo } from './aldine/types.ts';
 import type { Config, ModelRef } from './config.ts';
@@ -26,7 +26,7 @@ const SendBody = z.object({
 }).strict();
 
 /** Room for a few pasted screenshots; every other route keeps the small default. */
-const MESSAGE_BODY_LIMIT = 30 * 1024 * 1024;
+const MESSAGE_BODY_LIMIT = 48 * 1024 * 1024;
 
 const AcceptBody = z.object({
   edits: z.array(z.object({ change: z.number().int().min(0), edit: z.number().int().min(0), replacement: z.string().max(50_000) }).strict()).max(500).optional(),
@@ -45,6 +45,8 @@ function publicBlocks(messageId: number, blocks: Block[]): unknown[] {
   return blocks.map((b, i) => {
     if (b.type === 'opaque') return { type: 'opaque' };
     if (b.type === 'image') return { type: 'image', mediaType: b.mediaType, name: b.name, ref: `${messageId}/${i}` };
+    if (b.type === 'document') return { type: 'document', mediaType: b.mediaType, name: b.name, ref: `${messageId}/${i}`, hasText: !!b.text };
+    if (b.type === 'tool_result' && b.images?.length) return { ...b, images: b.images.map((im, k) => ({ mediaType: im.mediaType, ref: `${messageId}/${i}/${k}` })) };
     return b;
   });
 }
@@ -183,6 +185,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     if (!body.success) return reply.code(400).send({ error: `Invalid message: ${body.error.issues[0]?.message ?? 'bad request'}` });
     if (body.data.text.length > config.limits.maxMessageChars) return reply.code(413).send({ error: `Messages are limited to ${config.limits.maxMessageChars} characters` });
     if ((body.data.attachments ?? []).filter((a) => a.kind === 'image').length > MAX_IMAGES) return reply.code(413).send({ error: `At most ${MAX_IMAGES} images per message` });
+    if ((body.data.attachments ?? []).filter((a) => a.kind === 'pdf').length > MAX_PDFS) return reply.code(413).send({ error: `At most ${MAX_PDFS} PDFs per message` });
     const model = body.data.model ? config.models.find((m) => modelId(m) === body.data.model) : config.defaultModel;
     if (!model) return reply.code(400).send({ error: `Model "${body.data.model}" is not enabled on this server` });
     if (body.data.context.branch && found.project.branches.length && !found.project.branches.includes(body.data.context.branch)) {
@@ -198,13 +201,21 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     }
   });
 
-  app.get<{ Params: { mid: string; idx: string } }>(`${base}/messages/:mid/blocks/:idx`, async (req, reply) => {
+  app.get<{ Params: { mid: string; idx: string; sub?: string } }>(`${base}/messages/:mid/blocks/:idx/:sub?`, async (req, reply) => {
     const m = /^\d{1,12}$/.test(req.params.mid) ? store.getMessage(Number(req.params.mid)) : null;
     const b = m?.blocks[Number(req.params.idx)];
-    if (!m || !b || b.type !== 'image') return reply.code(404).send({ error: 'Attachment not found' });
+    let media: { mediaType: string; data: string } | undefined;
+    if (b?.type === 'image' || b?.type === 'document') media = b;
+    else if (b?.type === 'tool_result' && req.params.sub !== undefined) media = b.images?.[Number(req.params.sub)];
+    if (!m || !media) return reply.code(404).send({ error: 'Attachment not found' });
     const found = await sessionFor(req, reply, m.sessionId, 'view');
     if (!found) return;
-    return reply.header('content-type', b.mediaType).header('cache-control', 'private, max-age=86400').header('x-content-type-options', 'nosniff').send(Buffer.from(b.data, 'base64'));
+    return reply
+      .header('content-type', media.mediaType)
+      .header('cache-control', 'private, max-age=86400')
+      .header('x-content-type-options', 'nosniff')
+      .header('content-security-policy', "default-src 'none'; sandbox")
+      .send(Buffer.from(media.data, 'base64'));
   });
 
   app.get<{ Params: { rid: string }; Querystring: { after?: string } }>(`${base}/runs/:rid/events`, async (req, reply) => {

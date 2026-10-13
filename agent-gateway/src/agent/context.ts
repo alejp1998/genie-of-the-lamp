@@ -28,10 +28,19 @@ export const Attachment = z.discriminatedUnion('kind', [
     // ~5 MB decoded, the provider limit per image.
     data: z.string().min(1).max(7_000_000).regex(/^[A-Za-z0-9+/]+=*$/),
   }).strict(),
+  z.object({
+    kind: z.literal('pdf'),
+    name: z.string().min(1).max(200),
+    // ~20 MB decoded keeps a request under the provider's 32 MB cap.
+    data: z.string().min(1).max(27_000_000).regex(/^[A-Za-z0-9+/]+=*$/),
+    /** Text pdf.js extracted in the browser, for models that cannot read PDFs. */
+    text: z.string().max(400_000).optional(),
+  }).strict(),
 ]);
 export type Attachment = z.infer<typeof Attachment>;
 
 export const MAX_IMAGES = 4;
+export const MAX_PDFS = 3;
 const FILE_BUDGET_CHARS = 80_000;
 
 /** Turns attachments into model-ready blocks. Referenced files are read now, from Aldine, within a size budget. */
@@ -50,8 +59,10 @@ export async function attachmentBlocks(opts: {
       blocks.push({ type: 'text', meta: 'attachment', attachment: { kind: 'file', name: a.path, path: a.path }, text: `<referenced_file path="${a.path}">\n${body}\n</referenced_file>` });
     } else if (a.kind === 'text') {
       blocks.push({ type: 'text', meta: 'attachment', attachment: { kind: 'text', name: a.name }, text: `<pasted_text name="${a.name.replace(/"/g, "'")}">\n${a.text}\n</pasted_text>` });
-    } else {
+    } else if (a.kind === 'image') {
       blocks.push({ type: 'image', mediaType: a.mediaType, data: a.data, name: a.name });
+    } else {
+      blocks.push({ type: 'document', mediaType: 'application/pdf', data: a.data, name: a.name, ...(a.text ? { text: a.text } : {}) });
     }
   }
   return blocks;

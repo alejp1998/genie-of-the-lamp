@@ -163,6 +163,13 @@ export class HttpAldine implements AldineApi {
     try { return JSON.parse(text); } catch { return text; }
   }
 
+  async readBinary(token: string, projectId: string, branch: string, path: string): Promise<{ mediaType: string; data: Buffer } | null> {
+    const res = await this.rest(`/api/projects/${encodeURIComponent(projectId)}/file?path=${encodeURIComponent(path)}&branch=${encodeURIComponent(branch)}`, { token });
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error(`Aldine file read answered ${res.status}`);
+    return { mediaType: (res.headers.get('content-type') ?? 'application/octet-stream').split(';')[0], data: Buffer.from(await res.arrayBuffer()) };
+  }
+
   async compileStatus(token: string, projectId: string, branch: string): Promise<any> {
     const res = await this.rest(`/api/projects/${encodeURIComponent(projectId)}/compile-status?branch=${encodeURIComponent(branch)}`, { token });
     if (!res.ok) throw new Error(`Aldine compile-status answered ${res.status}`);

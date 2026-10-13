@@ -15,8 +15,13 @@ export function toAnthropicMessages(messages: ChatMessage[], model: string): Ant
         content.push({ type: 'tool_use', id: b.id, name: b.name, input: b.input as Record<string, unknown> });
       } else if (b.type === 'image' && m.role === 'user') {
         content.push({ type: 'image', source: { type: 'base64', media_type: b.mediaType as Anthropic.Base64ImageSource['media_type'], data: b.data } });
+      } else if (b.type === 'document' && m.role === 'user') {
+        content.push({ type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: b.data }, ...(b.name ? { title: b.name } : {}) });
       } else if (b.type === 'tool_result' && m.role === 'user') {
-        content.push({ type: 'tool_result', tool_use_id: b.id, content: b.content, ...(b.isError ? { is_error: true } : {}) });
+        const body: Anthropic.ToolResultBlockParam['content'] = b.images?.length
+          ? [{ type: 'text', text: b.content }, ...b.images.map((im) => ({ type: 'image' as const, source: { type: 'base64' as const, media_type: im.mediaType as Anthropic.Base64ImageSource['media_type'], data: im.data } }))]
+          : b.content;
+        content.push({ type: 'tool_result', tool_use_id: b.id, content: body, ...(b.isError ? { is_error: true } : {}) });
       } else if (b.type === 'opaque' && m.role === 'assistant' && b.provider === 'anthropic' && b.model === model) {
         content.push(b.data as Anthropic.ContentBlockParam);
       }

@@ -15,7 +15,10 @@ export type Block =
   /** A pasted or attached image (base64), only ever in user turns. */
   | { type: 'image'; mediaType: string; data: string; name?: string }
   | { type: 'tool_call'; id: string; name: string; input: unknown }
-  | { type: 'tool_result'; id: string; content: string; isError?: boolean }
+  /** `images`: what a tool showed the model (view_image), sent alongside its text. */
+  | { type: 'tool_result'; id: string; content: string; isError?: boolean; images?: { mediaType: string; data: string }[] }
+  /** An attached PDF. Models that read PDFs get the file; the rest get `text`, extracted in the browser. */
+  | { type: 'document'; mediaType: 'application/pdf'; data: string; name?: string; text?: string }
   /** Provider-specific block (e.g. Anthropic thinking with its signature),
    *  replayed verbatim only to the provider + model that produced it. */
   | { type: 'opaque'; provider: string; model: string; data: unknown };

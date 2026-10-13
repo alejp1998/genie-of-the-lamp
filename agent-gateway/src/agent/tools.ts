@@ -37,6 +37,7 @@ export interface FileRead {
 export interface RunState {
   compiles: number;
   proposals: number;
+  views?: number;
   /** Latest versions seen per path; propose_patch anchors against these. */
   reads: Map<string, FileRead>;
   /** Whole-file text fetched during this run (search reuses it). */
@@ -265,6 +266,32 @@ export const listLabels = tool({
   },
 });
 
+/** A tool result that also shows the model images (view_image). */
+export interface MediaResult { text: string; images: { mediaType: string; data: string }[] }
+export const isMediaResult = (r: unknown): r is MediaResult => !!r && typeof r === 'object' && Array.isArray((r as MediaResult).images) && typeof (r as MediaResult).text === 'string';
+
+const VIEWABLE = /\.(png|jpe?g|gif|webp)$/i;
+const MAX_VIEW_BYTES = 5 * 1024 * 1024;
+const MAX_VIEWS_PER_RUN = 6;
+
+export const viewImage = tool({
+  name: 'view_image',
+  description: 'Look at an image file in the project (PNG, JPEG, GIF or WebP), for example a figure, to check it against its caption or the text that describes it.',
+  schema: z.object({ path: z.string().min(1).max(500) }).strict(),
+  activity: (i) => `Looking at ${i.path}…`,
+  summarize: (r) => r.text,
+  async run(input, ctx) {
+    if (!VIEWABLE.test(input.path)) throw new Error('view_image shows PNG, JPEG, GIF and WebP files; for PDFs and vector figures, read the LaTeX that includes them instead.');
+    ctx.state.views = (ctx.state.views ?? 0) + 1;
+    if (ctx.state.views > MAX_VIEWS_PER_RUN) throw new Error(`At most ${MAX_VIEWS_PER_RUN} images per request.`);
+    const f = await ctx.aldine.readBinary(ctx.token, ctx.projectId, ctx.branch, input.path);
+    if (!f) throw new Error(`No file at ${input.path}. Call list_files to see the project's images.`);
+    if (f.data.length > MAX_VIEW_BYTES) throw new Error(`${input.path} is ${(f.data.length / 1048576).toFixed(1)} MB; images up to 5 MB can be viewed.`);
+    const mediaType = /\.png$/i.test(input.path) ? 'image/png' : /\.gif$/i.test(input.path) ? 'image/gif' : /\.webp$/i.test(input.path) ? 'image/webp' : 'image/jpeg';
+    return { text: `Viewed ${input.path} (${Math.round(f.data.length / 1024)} KB)`, images: [{ mediaType, data: f.data.toString('base64') }] } satisfies MediaResult;
+  },
+});
+
 const MAX_PROPOSALS_PER_RUN = 3;
 const PATH_OK = (p: string) => !p.startsWith('/') && !p.includes('\\') && !p.split('/').some((seg) => !seg || seg === '..' || seg.startsWith('.'));
 
@@ -340,7 +367,7 @@ export const proposePatch = tool({
   },
 });
 
-export const READ_TOOLS: AgentTool[] = [listFiles, readFile, searchProject, getCompileStatus, compile, listCitations, listLabels];
+export const READ_TOOLS: AgentTool[] = [listFiles, readFile, searchProject, getCompileStatus, compile, listCitations, listLabels, viewImage];
 export const ASSISTANT_TOOLS: AgentTool[] = [...READ_TOOLS, proposePatch];
 
 export function toolSpecs(tools: AgentTool[]): ToolSpec[] {

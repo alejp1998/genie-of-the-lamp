@@ -144,3 +144,17 @@ test('search reads files over the size cap in windows and skips unreadable ones'
   assert.deepEqual(r.unreadable, ['odd.tex']);
   assert.ok(aldine.calls.filter((c) => c.name === 'read_file' && c.args.path === 'big.cls' && c.args.from_line).length >= 3);
 });
+
+test('view_image carries the picture to the model and refuses non-images', async () => {
+  let turn = 0;
+  const h = harness(() => (++turn === 1
+    ? { toolCalls: [{ name: 'view_image', input: { path: 'figures/robot.png' } }, { name: 'view_image', input: { path: 'figures/plot.pdf' } }] }
+    : { text: 'ok' }));
+  await h.run();
+  const [img, pdf] = h.persisted[1].blocks as any[];
+  assert.equal(img.isError, undefined);
+  assert.equal(img.images[0].mediaType, 'image/png');
+  assert.equal(img.images[0].data, Buffer.from('89504e470d0a1a0a00000000', 'hex').toString('base64'));
+  assert.match(img.content, /^Viewed figures\/robot\.png/);
+  assert.ok(pdf.isError && /PNG, JPEG, GIF and WebP/.test(pdf.content));
+});

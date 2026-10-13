@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { openVirtualDoc } from '../components/VirtualDocs';
 import type { Attachment, EditorContext, GatewayConfig } from './api';
+import { intake, IntakeError } from './fileIntake';
 import type { ItemAttachment } from './transcript';
 
 export interface Prefill { text: string; seq: number; withSelection?: boolean; selection?: { text: string; fromLine: number; toLine: number } }
@@ -8,9 +9,8 @@ export interface Prefill { text: string; seq: number; withSelection?: boolean; s
 /** Chips the composer shows; `preview` is what the transcript shows until the stored copy loads. */
 export interface Pending { id: string; attachment: Attachment; label: string; preview: ItemAttachment }
 
-const IMAGE_TYPES = ['image/png', 'image/jpeg', 'image/gif', 'image/webp'];
-const MAX_IMAGE_BYTES = 5 * 1024 * 1024;
 const MAX_IMAGES = 4;
+const MAX_PDFS = 3;
 /** Pastes longer than this become an attachment instead of filling the box. */
 const PASTE_CHARS = 1500;
 const PASTE_LINES = 30;
@@ -27,15 +27,6 @@ export const SLASH_COMMANDS: { name: string; hint: string; prompt: string }[] = 
 let seq = 0;
 const nextId = () => `a${Date.now().toString(36)}${seq++}`;
 
-function readBase64(file: Blob): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(String(r.result).replace(/^data:[^,]*,/, ''));
-    r.onerror = () => reject(r.error);
-    r.readAsDataURL(file);
-  });
-}
-
 function contextLabel(ctx: EditorContext): string {
   if (ctx.selection) {
     const n = ctx.selection.toLine - ctx.selection.fromLine + 1;
@@ -46,7 +37,7 @@ function contextLabel(ctx: EditorContext): string {
 }
 
 export function openAttachment(a: ItemAttachment, key: string) {
-  if (a.kind === 'image' && a.src) openVirtualDoc({ id: `att:${key}`, title: a.name, kind: 'image', src: a.src });
+  if ((a.kind === 'image' || a.kind === 'pdf') && a.src) openVirtualDoc({ id: `att:${key}`, title: a.name, kind: a.kind, src: a.src });
   else openVirtualDoc({ id: `att:${key}`, title: a.kind === 'file' ? `${a.name} (as sent)` : a.name, kind: /\.(tex|sty|cls|bib)$/i.test(a.name) || a.kind === 'file' ? 'latex' : 'text', content: a.text ?? '' });
 }
 
@@ -57,7 +48,7 @@ export function Chips({ items, onRemove }: { items: { key: string; a: ItemAttach
       {items.map(({ key, a }) => (
         <span key={key} className={`assistant__chip-att assistant__chip-att--${a.kind}`} data-testid="assistant-attachment">
           <button className="assistant__chip-open" onClick={() => openAttachment(a, key)} title={`Open ${a.name} in the editor area`}>
-            {a.kind === 'image' && a.src ? <img src={a.src} alt="" /> : <span className="assistant__chip-icon" aria-hidden="true">{a.kind === 'file' ? '@' : '¶'}</span>}
+            {a.kind === 'image' && a.src ? <img src={a.src} alt="" /> : <span className="assistant__chip-icon" aria-hidden="true">{a.kind === 'file' ? '@' : a.kind === 'pdf' ? 'PDF' : '¶'}</span>}
             <span className="assistant__chip-name">{a.name}</span>
           </button>
           {onRemove && <button className="assistant__chip-x" onClick={() => onRemove(key)} aria-label={`Remove ${a.name}`}>×</button>}
@@ -81,11 +72,12 @@ interface Props {
   prefill: Prefill | null;
 }
 
-export default function Composer({ config, ctx, files, running, model, setModel, onSend, onStop, onError, prefill }: Props) {
+export interface ComposerHandle { addFiles(list: FileList | File[]): Promise<void> }
+
+const Composer = forwardRef<ComposerHandle, Props>(function Composer({ config, ctx, files, running, model, setModel, onSend, onStop, onError, prefill }, ref) {
   const [text, setText] = useState('');
   const [pending, setPending] = useState<Pending[]>([]);
   const [menu, setMenu] = useState<{ kind: 'file' | 'slash'; query: string; index: number } | null>(null);
-  const [dragging, setDragging] = useState(false);
   const input = useRef<HTMLTextAreaElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const pastes = useRef(0);
@@ -140,20 +132,20 @@ export default function Composer({ config, ctx, files, running, model, setModel,
   };
 
   const addFiles = async (list: FileList | File[]) => {
+    let images = pending.filter((p) => p.attachment.kind === 'image').length;
+    let pdfs = pending.filter((p) => p.attachment.kind === 'pdf').length;
     for (const f of Array.from(list)) {
-      if (f.type.startsWith('image/')) {
-        if (!IMAGE_TYPES.includes(f.type)) { onError(`${f.name || 'That image'} is ${f.type}; attach PNG, JPEG, GIF or WebP.`); continue; }
-        if (f.size > MAX_IMAGE_BYTES) { onError(`${f.name || 'That image'} is over 5 MB.`); continue; }
-        if (pending.filter((p) => p.attachment.kind === 'image').length >= MAX_IMAGES) { onError(`At most ${MAX_IMAGES} images per message.`); return; }
-        const data = await readBase64(f);
-        const name = f.name && f.name !== 'image.png' ? f.name : `Screenshot ${new Date().toLocaleTimeString()}`;
-        setPending((p) => [...p, { id: nextId(), label: name, attachment: { kind: 'image', name, mediaType: f.type, data }, preview: { kind: 'image', name, src: URL.createObjectURL(f) } }]);
-      } else if (f.size < 400_000) {
-        const t = await f.text();
-        setPending((p) => [...p, { id: nextId(), label: f.name, attachment: { kind: 'text', name: f.name, text: t }, preview: { kind: 'text', name: f.name, text: t } }]);
-      } else onError(`${f.name} is too large to attach; add it to the project instead.`);
+      try {
+        const got = await intake(f);
+        if (got.attachment.kind === 'image' && ++images > MAX_IMAGES) { onError(`At most ${MAX_IMAGES} images per message.`); continue; }
+        if (got.attachment.kind === 'pdf' && ++pdfs > MAX_PDFS) { onError(`At most ${MAX_PDFS} PDFs per message.`); continue; }
+        setPending((p) => [...p, { id: nextId(), ...got }]);
+      } catch (err) {
+        onError(err instanceof IntakeError ? err.message : `Could not attach ${f.name}: ${(err as Error).message}`);
+      }
     }
   };
+  useImperativeHandle(ref, () => ({ addFiles }));
 
   const submit = async (value = text) => {
     const v = value.trim();
@@ -162,13 +154,7 @@ export default function Composer({ config, ctx, files, running, model, setModel,
   };
 
   return (
-    <form
-      className={`assistant__composer${dragging ? ' assistant__composer--drop' : ''}`}
-      onSubmit={(e) => { e.preventDefault(); submit(); }}
-      onDragOver={(e) => { if (e.dataTransfer.types.includes('Files')) { e.preventDefault(); setDragging(true); } }}
-      onDragLeave={() => setDragging(false)}
-      onDrop={(e) => { if (e.dataTransfer.files.length) { e.preventDefault(); setDragging(false); void addFiles(e.dataTransfer.files); } }}
-    >
+    <form className="assistant__composer" onSubmit={(e) => { e.preventDefault(); submit(); }}>
       <div className="assistant__context-row">
         <span className="assistant__context" title="Sent with your message so the assistant knows where you are" data-testid="assistant-context">{contextLabel(ctx)}</span>
         {ctx.selection && <button type="button" className="assistant__link" onClick={() => attachSelection()} data-testid="assistant-add-selection">Add selection</button>}
@@ -206,8 +192,8 @@ export default function Composer({ config, ctx, files, running, model, setModel,
             if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit(); }
           }}
           onPaste={(e) => {
-            const imgs = Array.from(e.clipboardData.files).filter((f) => f.type.startsWith('image/'));
-            if (imgs.length) { e.preventDefault(); void addFiles(imgs); return; }
+            // Files copied in a file manager or a screenshot tool arrive as files.
+            if (e.clipboardData.files.length) { e.preventDefault(); void addFiles(e.clipboardData.files); return; }
             const t = e.clipboardData.getData('text/plain');
             if (t.length > PASTE_CHARS || t.split('\n').length > PASTE_LINES) {
               e.preventDefault();
@@ -223,8 +209,8 @@ export default function Composer({ config, ctx, files, running, model, setModel,
         />
       </div>
       <div className="assistant__row">
-        <button type="button" className="btn btn--ghost btn--small" onClick={() => fileInput.current?.click()} title="Attach images or text files (or paste / drop them)" data-testid="assistant-attach">Attach</button>
-        <input ref={fileInput} type="file" multiple hidden accept="image/png,image/jpeg,image/gif,image/webp,.tex,.bib,.txt,.md,.log,.csv" onChange={(e) => { if (e.target.files) void addFiles(e.target.files); e.target.value = ''; }} />
+        <button type="button" className="btn btn--ghost btn--small" onClick={() => fileInput.current?.click()} title="Attach text files, PDFs or images (or paste / drop them)" data-testid="assistant-attach">Attach</button>
+        <input ref={fileInput} type="file" multiple hidden onChange={(e) => { if (e.target.files) void addFiles(e.target.files); e.target.value = ''; }} />
         {config.models.length > 1 ? (
           <select className="fmt__select" value={model} onChange={(e) => setModel(e.target.value)} aria-label="Model" data-testid="assistant-model">
             {config.models.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
@@ -241,4 +227,6 @@ export default function Composer({ config, ctx, files, running, model, setModel,
       </div>
     </form>
   );
-}
+});
+
+export default Composer;

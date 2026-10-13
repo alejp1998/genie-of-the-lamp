@@ -211,3 +211,17 @@ test('attachments: too many images, bad base64 and bad media types are refused',
   assert.equal((await send2([{ ...img, data: 'not base64!' }])).status, 400);
   assert.equal((await send2([{ ...img, mediaType: 'image/svg+xml' }])).status, 400);
 });
+
+test('attachments: a PDF is stored as a document and served back as application/pdf', async () => {
+  const s = await newSession();
+  const pdf = Buffer.from('%PDF-1.4 tiny').toString('base64');
+  const r = await fetch(`${base}/sessions/${s.id}/messages`, as('alice', { method: 'POST', body: JSON.stringify({ text: 'Summarize the review', context: { branch: 'main' }, attachments: [{ kind: 'pdf', name: 'review.pdf', data: pdf, text: 'R1: vague.' }] }) }));
+  assert.equal(r.status, 202);
+  await readEvents((await json(r)).run.id);
+  const detail = await json(await fetch(`${base}/sessions/${s.id}`, as('alice')));
+  const doc = detail.messages[0].blocks.find((b: any) => b.type === 'document');
+  assert.deepEqual([doc.name, doc.hasText, doc.data], ['review.pdf', true, undefined]);
+  const got = await fetch(`${base}/messages/${doc.ref.replace('/', '/blocks/')}`, as('alice'));
+  assert.equal(got.headers.get('content-type'), 'application/pdf');
+  assert.equal(Buffer.from(await got.arrayBuffer()).toString(), '%PDF-1.4 tiny');
+});

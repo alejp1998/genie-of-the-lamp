@@ -10,6 +10,8 @@ export interface ProviderConfig {
   baseUrl?: string;
   /** Accepts image input (pasted screenshots); without it images reach the model as a note. */
   vision?: boolean;
+  /** Reads PDFs natively; without it a PDF reaches the model as its extracted text. */
+  documents?: boolean;
 }
 
 export interface ModelRef {
@@ -82,7 +84,7 @@ export function parseModelRef(ref: string, providers: ProviderConfig[]): ModelRe
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const providers: ProviderConfig[] = [];
   if (env.ANTHROPIC_API_KEY) {
-    providers.push({ id: 'anthropic', kind: 'anthropic', apiKey: env.ANTHROPIC_API_KEY, baseUrl: env.ANTHROPIC_BASE_URL || undefined, vision: true });
+    providers.push({ id: 'anthropic', kind: 'anthropic', apiKey: env.ANTHROPIC_API_KEY, baseUrl: env.ANTHROPIC_BASE_URL || undefined, vision: true, documents: true });
   }
   if (env.OPENAI_API_KEY) {
     providers.push({ id: 'openai', kind: 'openai', apiKey: env.OPENAI_API_KEY, baseUrl: env.OPENAI_BASE_URL || 'https://api.openai.com/v1', vision: true });

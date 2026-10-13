@@ -108,3 +108,23 @@ test('images: anthropic gets base64 image blocks; OpenAI-compatible gets image_u
   const blind = toOpenAIMessages('s', withImage, false);
   assert.match((blind[1] as any).content, /what is this\?\n\n\[Image “shot.png” attached; this model cannot view images.\]/);
 });
+
+test('PDFs: anthropic gets a document block; OpenAI-compatible gets the extracted text', () => {
+  const msg: ChatMessage[] = [{ role: 'user', blocks: [{ type: 'document', mediaType: 'application/pdf', data: 'JVBERi0=', name: 'review.pdf', text: 'Reviewer 1: the intro is vague.' }, { type: 'text', text: 'summarize' }] }];
+  const a = toAnthropicMessages(msg, 'm');
+  assert.deepEqual((a[0].content as any[])[0], { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: 'JVBERi0=' }, title: 'review.pdf' });
+  const o = toOpenAIMessages('s', msg, true);
+  assert.match((o[1] as any).content, /summarize\n\n<attached_pdf name="review.pdf">\nReviewer 1: the intro is vague\.\n<\/attached_pdf>/);
+});
+
+test('tool images: anthropic puts them in the tool_result; OpenAI-compatible adds a user turn after the tool messages', () => {
+  const msgs: ChatMessage[] = [
+    { role: 'assistant', blocks: [{ type: 'tool_call', id: 't1', name: 'view_image', input: { path: 'f.png' } }] },
+    { role: 'user', blocks: [{ type: 'tool_result', id: 't1', content: 'Viewed f.png', images: [{ mediaType: 'image/png', data: 'AAAA' }] }] },
+  ];
+  const a = toAnthropicMessages(msgs, 'm');
+  assert.deepEqual(((a[1].content as any[])[0].content as any[]).map((c: any) => c.type), ['text', 'image']);
+  const o = toOpenAIMessages('s', msgs, true);
+  assert.deepEqual(o.map((m) => m.role), ['system', 'assistant', 'tool', 'user']);
+  assert.equal((o[3] as any).content[0].type, 'image_url');
+});

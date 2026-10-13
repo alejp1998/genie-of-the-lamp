@@ -121,6 +121,14 @@ export class FakeAldine implements AldineApi {
     }
   }
 
+  binaries: Record<string, { mediaType: string; data: Buffer }> = {
+    'figures/robot.png': { mediaType: 'image/png', data: Buffer.from('89504e470d0a1a0a00000000', 'hex') },
+  };
+
+  async readBinary(_token: string, _projectId: string, _branch: string, path: string) {
+    return this.binaries[path] ?? null;
+  }
+
   async compileStatus(): Promise<any> {
     return { running: false, finishedAt: '2026-10-13T10:00:00Z', result: { ok: false, errors: [{ type: 'error', file: 'intro.tex', line: 2, message: 'Undefined control sequence.' }], durationMs: 1500 } };
   }

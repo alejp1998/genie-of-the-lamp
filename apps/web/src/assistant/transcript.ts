@@ -7,7 +7,8 @@ function attachmentsOf(m: ChatMessage): ItemAttachment[] {
   const out: ItemAttachment[] = [];
   for (const b of m.blocks) {
     if (b.type === 'text' && b.meta === 'attachment' && b.attachment) out.push({ kind: b.attachment.kind, name: b.attachment.name, path: b.attachment.path, text: unwrap(b.text) });
-    else if (b.type === 'image') out.push({ kind: 'image', name: b.name || 'image', src: gateway.imageUrl(b.ref) });
+    else if (b.type === 'image') out.push({ kind: 'image', name: b.name || 'image', src: gateway.blockUrl(b.ref) });
+    else if (b.type === 'document') out.push({ kind: 'pdf', name: b.name || 'document.pdf', src: gateway.blockUrl(b.ref) });
   }
   return out;
 }
@@ -15,7 +16,7 @@ function attachmentsOf(m: ChatMessage): ItemAttachment[] {
 const contextOf = (m: ChatMessage) => m.blocks.filter((b): b is { type: 'text'; text: string; meta: 'context' } => b.type === 'text' && b.meta === 'context').map((b) => b.text).join('\n\n');
 
 export interface ItemAttachment {
-  kind: 'file' | 'text' | 'image';
+  kind: 'file' | 'text' | 'image' | 'pdf';
   name: string;
   /** Text as the model received it (file snapshot or pasted text). */
   text?: string;
@@ -27,7 +28,7 @@ export interface ItemAttachment {
 export type Item =
   | { kind: 'user'; key: string; text: string; attachments?: ItemAttachment[]; context?: string }
   | { kind: 'assistant'; key: string; text: string }
-  | { kind: 'tool'; key: string; id: string; name: string; activity: string; summary?: string; ok?: boolean; running: boolean; input?: unknown; output?: string }
+  | { kind: 'tool'; key: string; id: string; name: string; activity: string; summary?: string; ok?: boolean; running: boolean; input?: unknown; output?: string; images?: string[] }
   | { kind: 'notice'; key: string; level: 'warn' | 'error'; message: string };
 
 const userText = (m: ChatMessage) => m.blocks
@@ -71,7 +72,7 @@ export function buildTranscript(messages: ChatMessage[], activity: RunEvent[], s
       for (const b of m.blocks) {
         if (b.type !== 'tool_result') continue;
         const t = tools.get(b.id);
-        if (t) { t.output = b.content; t.ok = t.ok ?? !b.isError; t.running = false; }
+        if (t) { t.output = b.content; t.ok = t.ok ?? !b.isError; t.running = false; if (b.images?.length) t.images = b.images.map((im) => gateway.blockUrl(im.ref)); }
       }
       const text = userText(m);
       const attachments = attachmentsOf(m);
