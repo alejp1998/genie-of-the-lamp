@@ -7,7 +7,9 @@ import { Fragment, type ReactNode } from 'react';
  * cannot inject markup.
  */
 
-const INLINE = /(`[^`\n]+`)|(\*\*[^*\n]+\*\*)|(\*[^*\s][^*\n]*\*)|(\[[^\]\n]+\]\(https?:\/\/[^)\s]+\))/g;
+const INLINE = /(`[^`\n]+`)|(\*\*[^*\n]+\*\*)|(\*[^*\s][^*\n]*\*)|(\[[^\]\n]+\]\(https?:\/\/[^)\s]+\))|(https?:\/\/[^\s<>()[\]]*[^\s<>()[\].,;:!?'"])/g;
+
+const link = (key: string, href: string, label: ReactNode) => <a key={key} href={href} target="_blank" rel="noreferrer noopener">{label}</a>;
 
 function inline(text: string, key: string): ReactNode[] {
   const out: ReactNode[] = [];
@@ -18,12 +20,13 @@ function inline(text: string, key: string): ReactNode[] {
     const tok = m[0];
     const k = `${key}-${i++}`;
     if (m[1]) out.push(<code key={k} className="md__code">{tok.slice(1, -1)}</code>);
-    else if (m[2]) out.push(<strong key={k}>{tok.slice(2, -2)}</strong>);
-    else if (m[3]) out.push(<em key={k}>{tok.slice(1, -1)}</em>);
-    else {
+    // Emphasis can wrap a link or code (models write **[Title](url)**), so its content is inline too.
+    else if (m[2]) out.push(<strong key={k}>{inline(tok.slice(2, -2), k)}</strong>);
+    else if (m[3]) out.push(<em key={k}>{inline(tok.slice(1, -1), k)}</em>);
+    else if (m[4]) {
       const [, label, href] = /^\[([^\]]+)\]\(([^)]+)\)$/.exec(tok)!;
-      out.push(<a key={k} href={href} target="_blank" rel="noreferrer noopener">{label}</a>);
-    }
+      out.push(link(k, href, inline(label, k)));
+    } else out.push(link(k, tok, tok));
     last = m.index! + tok.length;
   }
   if (last < text.length) out.push(text.slice(last));

@@ -260,7 +260,7 @@ export default function AssistantPanel({ projectId, config, getContext, onClose,
           <span className="assistant__caret" aria-hidden="true">▾</span>
         </button>
         <span className="toolbar__spacer" />
-        <button className="btn btn--ghost btn--small" onClick={() => { a.select(null); setMenu(null); }} data-testid="assistant-new-chat" title="Start a new chat">New chat</button>
+        <button className="btn btn--ghost btn--small" onClick={() => { a.select(null); setMenu(null); }} data-testid="assistant-new-chat" title="Start a new chat" aria-label="New chat"><span className="assistant__new-icon" aria-hidden="true">+</span><span className="assistant__new-label">New chat</span></button>
         {onPlace && placement && <LayoutSwitch placement={placement} onPlace={onPlace} />}
         {session?.isOwner && (
           <button className="btn btn--ghost btn--small" onClick={() => setMenu(menu === 'actions' ? null : 'actions')} aria-haspopup="menu" aria-expanded={menu === 'actions'} aria-label="Chat options" data-testid="assistant-actions">⋯</button>
