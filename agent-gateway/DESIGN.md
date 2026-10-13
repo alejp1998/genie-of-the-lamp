@@ -147,7 +147,7 @@ agent-gateway/
 | GET / POST | `/projects/:pid/sessions` | List own and shared sessions, or create one (private by default). |
 | GET / PATCH / DELETE | `/sessions/:sid` | Messages, proposals and runs; rename or change visibility (owner only). |
 | POST | `/sessions/:sid/messages` | `{text, context, model?}` starts a run and returns `{runId}` (`409` if a run is already active). |
-| GET | `/runs/:rid/events` | SSE stream of `text`, `tool_start`, `tool_end`, `proposal`, `usage`, `error` and `done` events. Supports `Last-Event-ID`. |
+| GET | `/runs/:rid/events` | SSE stream of `status`, `text`, `tool_start`, `tool_end`, `proposal`, `usage`, `notice`, `run_error` and `done` events (`run_error`, because EventSource reserves `error` for connection failures). Supports `Last-Event-ID`. |
 | POST | `/runs/:rid/cancel` | Cancel the run, aborting the provider stream and the in-flight tool call. |
 | POST | `/proposals/:id/accept` | `{edited?}` re-validates, rebases, applies through `batch_write`, auto-compiles, and returns `{commit, compile}`. |
 | POST | `/proposals/:id/reject` | Marks the proposal rejected; the document is untouched. |

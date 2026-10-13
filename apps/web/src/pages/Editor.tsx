@@ -36,6 +36,8 @@ import { toggleTheme } from '../theme';
 import { shortcut } from '../platform';
 import ProjectSettings from '../components/ProjectSettings';
 import { ENGINES } from '../util/engines';
+import { AssistantDock, AssistantToggle, useAssistantDock } from '../assistant/Dock';
+import type { EditorContext } from '../assistant/api';
 
 type CompileStatus = 'idle' | 'compiling' | 'ok' | 'error';
 
@@ -73,17 +75,22 @@ export default function Editor() {
   const [compile, setCompile] = useState<{ status: CompileStatus; result: CompileResult | null; wallMs?: number }>({ status: 'idle', result: null });
   const [pdfWidth, setPdfWidth] = useState(() => Math.max(360, Math.round(window.innerWidth * 0.4)));
   const [resizing, setResizing] = useState(false);
+  const dock = useAssistantDock(id);
+  // Room the assistant panel takes from the row; the preview's bounds leave it out.
+  const reservedRef = useRef(0);
+  reservedRef.current = dock.reserved;
   // Floor the upper bound so a narrow window can't push it below the 280
   // minimum (which would invert the clamp and collapse the pane).
-  const clampPdfWidth = (w: number) => Math.min(Math.max(280, w), Math.max(360, window.innerWidth - 500));
+  const clampPdfWidth = (w: number) => Math.min(Math.max(280, w), Math.max(360, window.innerWidth - 500 - reservedRef.current));
   // The pane keeps an absolute width, so shrinking the window would otherwise
   // leave a preview wider than the room for it and squeeze the editor away.
   // Same bound as the resizer's.
   useEffect(() => {
-    const fit = () => setPdfWidth((w) => Math.min(w, Math.max(280, window.innerWidth - 500)));
+    const fit = () => setPdfWidth((w) => Math.min(w, Math.max(280, window.innerWidth - 500 - reservedRef.current)));
+    fit();
     window.addEventListener('resize', fit);
     return () => window.removeEventListener('resize', fit);
-  }, []);
+  }, [dock.reserved]);
   const [users, setUsers] = useState<PresenceUser[]>([]);
   const [pluginPanels, setPluginPanels] = useState<PluginPanel[]>([]);
   const [auto, setAuto] = useState(() => localStorage.getItem('aldine.autoTypeset') !== '0');
@@ -591,6 +598,17 @@ export default function Editor() {
   };
 
   const insertAtCursor = useCallback((text: string) => codeRef.current?.insertAtCursor(text), []);
+  // What the assistant is told about the user's view; the gateway fetches compile state itself.
+  const getAssistantContext = useCallback((): EditorContext => {
+    const c = codeRef.current?.getCursorContext();
+    const sel = c?.selection;
+    return {
+      branch,
+      openFile: activeFile,
+      cursor: c ? { line: c.line, column: c.column } : null,
+      selection: sel ? { ...sel, text: sel.text.slice(0, 20_000) } : null,
+    };
+  }, [branch, activeFile]);
 
   // ---- review comments ----
   const loadComments = useCallback(async () => {
@@ -963,6 +981,7 @@ export default function Editor() {
         )}
         <button className="btn" onClick={() => setSettingsOpen(true)} data-testid="project-settings-open" title="Project settings: compiler, main document, TeX Live">Settings</button>
         <button className="btn" onClick={startComment} data-testid="add-comment" title="Comment on the selected text">Comment</button>
+        <AssistantToggle dock={dock} />
         <Presence users={users} />
         <button className="btn btn--ghost sidebar-toggle" onClick={() => setSidebarHidden((h) => !h)} aria-pressed={!sidebarHidden} data-testid="sidebar-toggle" title="Show or hide the file tree">
           {sidebarHidden ? 'Files' : 'Hide files'}
@@ -1195,7 +1214,7 @@ export default function Editor() {
           aria-label="Resize preview"
           aria-valuenow={Math.round(pdfWidth)}
           aria-valuemin={280}
-          aria-valuemax={Math.max(360, window.innerWidth - 500)}
+          aria-valuemax={Math.max(360, window.innerWidth - 500 - dock.reserved)}
           tabIndex={0}
           data-testid="pane-resizer"
           onPointerDown={(e) => {
@@ -1293,6 +1312,7 @@ export default function Editor() {
             onInverse={onPdfInverse}
           />
         </section>
+        <AssistantDock dock={dock} projectId={id} getContext={getAssistantContext} onResizing={setResizing} />
       </div>
 
       <CommandPalette open={paletteOpen} commands={commands} onClose={() => setPaletteOpen(false)} />

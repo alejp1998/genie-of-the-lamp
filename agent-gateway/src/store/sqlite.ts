@@ -192,6 +192,13 @@ export class SqliteStore implements Store {
     }));
   }
 
+  listSessionActivity(sessionId: string): RunEvent[] {
+    return (this.db.prepare(`SELECT e.* FROM events e JOIN runs r ON e.run_id = r.id
+      WHERE r.session_id = ? AND e.type IN ('tool_start', 'tool_end', 'notice', 'run_error') ORDER BY e.id`).all(sessionId) as Row[]).map((r) => ({
+      id: r.id, runId: r.run_id, type: r.type, data: JSON.parse(r.data), createdAt: r.created_at,
+    }));
+  }
+
   audit(e: AuditEntry): void {
     this.auditDb.prepare(`INSERT INTO audit (at, user_id, project_id, session_id, run_id, action, tool, args_hash, status, duration_ms, detail)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(

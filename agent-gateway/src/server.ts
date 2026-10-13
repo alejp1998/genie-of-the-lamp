@@ -134,6 +134,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       session: publicSession(found.session, req.identity!),
       messages: store.listMessages(found.session.id).map(publicMessage),
       runs: store.listRuns(found.session.id),
+      activity: store.listSessionActivity(found.session.id),
       activeRunId: active && runs.isLive(active.id) ? active.id : null,
     };
   });

@@ -11,6 +11,11 @@ All notable changes to Aldine are documented here. The format follows
   in-editor assistant. It checks the Aldine sign-in, acts through `/mcp` with a
   short-lived token scoped to one project, streams chat runs, keeps chat
   sessions private by default, and writes an audit log.
+- Assistant panel (Aladine fork): a right-hand pane, shown only when an Agent
+  Gateway answers at `/agent-gateway`. It has streaming chat with
+  human-readable tool activity, the open file, cursor and selection attached
+  to each message, and private or project-shared chat sessions. It becomes a
+  drawer on phones.
 - `HOST` sets the address the server listens on (default `0.0.0.0`), so a
   development server can stay on `127.0.0.1`.
 - The divider between editor and preview can be dragged with a finger or a

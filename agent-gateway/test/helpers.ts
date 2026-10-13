@@ -21,6 +21,10 @@ export class FakeAldine implements AldineApi {
   compileOk = false;
   /** Milliseconds every tool call takes; lets tests cancel mid-call. */
   delayMs = 0;
+  /** Whole-file reads above this many bytes are refused, as Aldine's ~100 KB cap does. */
+  readCapBytes = Infinity;
+  /** Paths whose reads always fail. */
+  broken = new Set<string>();
 
   async whoami(cookie: string): Promise<Identity | null> {
     const name = cookie.replace(/^aldine_session=/, '');
@@ -54,12 +58,14 @@ export class FakeAldine implements AldineApi {
         const path = String(args.path);
         const c = this.files[path];
         if (c === undefined) throw new AldineToolError(`No file at ${path}. Call project_structure to see the files.`);
+        if (this.broken.has(path)) throw new AldineToolError(`${path} is a binary file.`);
         const lines = c.split('\n');
         if (args.from_line || args.to_line) {
           const from = Number(args.from_line ?? 1);
           const to = Math.min(Number(args.to_line ?? lines.length), lines.length);
           return { content: lines.slice(from - 1, to).join('\n'), totalLines: lines.length, from_line: from, to_line: to, path, contentVersion: 7, fileVersion: 3, ...head };
         }
+        if (c.length > this.readCapBytes) throw new AldineToolError(`That read is ${c.length} bytes — cap is ~100 KB. The file has ${lines.length} lines; read it in windows with from_line/to_line.`);
         return { content: c, totalLines: lines.length, path, contentVersion: 7, fileVersion: 3, ...head };
       }
       case 'compile':

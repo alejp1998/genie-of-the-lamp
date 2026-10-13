@@ -53,6 +53,8 @@ export interface CodePaneHandle {
   insertAtCursor(text: string): void;
   currentLine(): number | null;
   getSelection(): { from: number; to: number; quote: string } | null;
+  /** Cursor position and selection in line terms (1-based lines, 0-based column). */
+  getCursorContext(): { line: number; column: number; selection: { text: string; fromLine: number; toLine: number } | null } | null;
   setCommentRanges(ranges: CommentRange[]): void;
   revealPos(pos: number): void;
   format(action: 'bold' | 'italic' | 'list' | { section: 1 | 2 | 3 | 4 }): void;
@@ -233,6 +235,18 @@ const CodePane = forwardRef<CodePaneHandle, Props>(function CodePane({ projectId
       const sel = view.state.selection.main;
       if (sel.empty) return null;
       return { from: sel.from, to: sel.to, quote: view.state.sliceDoc(sel.from, sel.to) };
+    },
+    getCursorContext() {
+      const view = viewRef.current;
+      if (!view) return null;
+      const { doc, selection } = view.state;
+      const sel = selection.main;
+      const head = doc.lineAt(sel.head);
+      return {
+        line: head.number,
+        column: sel.head - head.from,
+        selection: sel.empty ? null : { text: view.state.sliceDoc(sel.from, sel.to), fromLine: doc.lineAt(sel.from).number, toLine: doc.lineAt(sel.to).number },
+      };
     },
     setCommentRanges(ranges) {
       lastCommentRanges.current = ranges; // remember for a re-apply once the doc syncs

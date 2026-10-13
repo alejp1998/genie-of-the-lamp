@@ -127,3 +127,20 @@ test('normalizeHistory merges adjacent same-role turns in order', () => {
   assert.equal(merged.length, 3);
   assert.deepEqual(merged[2].blocks.map((b) => b.type), ['tool_result', 'text']);
 });
+
+test('search reads files over the size cap in windows and skips unreadable ones', async () => {
+  const aldine = new FakeAldine();
+  aldine.files['big.cls'] = Array.from({ length: 4000 }, (_, i) => (i === 3210 ? '\\def\\needle{x}' : `% line ${i + 1}`)).join('\n');
+  aldine.readCapBytes = 20_000;
+  aldine.files['odd.tex'] = 'needle';
+  aldine.broken.add('odd.tex');
+  let turn = 0;
+  const h = harness(() => (++turn === 1 ? { toolCalls: [{ name: 'search_project', input: { query: 'needle' } }] } : { text: 'ok' }), { aldine });
+  await h.run();
+  const res = h.persisted[1].blocks[0] as any;
+  assert.ok(!res.isError, res.content);
+  const r = JSON.parse(res.content);
+  assert.deepEqual(r.matches.map((m: any) => `${m.path}:${m.line}`), ['big.cls:3211']);
+  assert.deepEqual(r.unreadable, ['odd.tex']);
+  assert.ok(aldine.calls.filter((c) => c.name === 'read_file' && c.args.path === 'big.cls' && c.args.from_line).length >= 3);
+});

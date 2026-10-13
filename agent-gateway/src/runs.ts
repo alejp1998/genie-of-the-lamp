@@ -132,7 +132,7 @@ export class RunManager {
       error = (err as Error).message || 'The assistant failed';
     } finally {
       clearTimeout(timeout);
-      if (error) emit('error', { message: error });
+      if (error) emit('run_error', { message: error });
       emit('done', { status, usage, error });
       this.store.finishRun(run.id, status, usage, error);
       this.store.audit({ ...auditBase, action: 'run_finish', status: status === 'done' ? 'ok' : status === 'cancelled' ? 'cancelled' : 'error', detail: { status, usage, error } });

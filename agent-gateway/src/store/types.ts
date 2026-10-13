@@ -83,6 +83,8 @@ export interface Store {
 
   appendEvent(runId: string, type: string, data: unknown): RunEvent;
   listEvents(runId: string, afterId?: number): RunEvent[];
+  /** Tool activity, notices and errors across a session's runs (no text deltas), for rendering history. */
+  listSessionActivity(sessionId: string): RunEvent[];
 
   audit(e: AuditEntry): void;
   listAudit(filter: { projectId?: string; sessionId?: string; limit?: number }): AuditRecord[];

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { AldineApi } from '../aldine/types.ts';
+import { type AldineApi, AldineToolError } from '../aldine/types.ts';
 import type { Limits } from '../config.ts';
 import type { ToolSpec } from '../providers/types.ts';
 
@@ -58,12 +58,29 @@ function remember(ctx: ToolContext, path: string, r: { contentVersion?: number; 
   }
 }
 
+/** Lines per request when a file is over Aldine's single-read cap (~100 KB). */
+const WINDOW_LINES = 1500;
+
 async function wholeFile(ctx: ToolContext, path: string): Promise<string> {
   const hit = ctx.state.files.get(path);
   if (hit !== undefined) return hit;
-  const r = await mcp(ctx, 'read_file', { path });
-  remember(ctx, path, r);
-  const content = typeof r.content === 'string' ? r.content : '';
+  let content: string;
+  try {
+    const r = await mcp(ctx, 'read_file', { path });
+    remember(ctx, path, r);
+    content = typeof r.content === 'string' ? r.content : '';
+  } catch (err) {
+    if (!(err instanceof AldineToolError) || !/cap|too large|bytes/i.test(err.message)) throw err;
+    // Over the read cap: stitch it together from line windows.
+    const parts: string[] = [];
+    let total = Infinity;
+    for (let from = 1; from <= total; from += WINDOW_LINES) {
+      const r = await mcp(ctx, 'read_file', { path, from_line: from, to_line: from + WINDOW_LINES - 1 });
+      total = typeof r.totalLines === 'number' ? r.totalLines : 0;
+      parts.push(typeof r.content === 'string' ? r.content.replace(/\n$/, '') : '');
+    }
+    content = parts.join('\n');
+  }
   ctx.state.files.set(path, content);
   return content;
 }
@@ -131,11 +148,19 @@ export const searchProject = tool({
     const hit = new Set<string>();
     let bytes = 0;
     let truncated = false;
+    const skipped: string[] = [];
     for (const f of files) {
       if (ctx.signal.aborted) break;
       if (bytes + (f.size ?? 0) > SEARCH_MAX_BYTES) { truncated = true; break; }
       bytes += f.size ?? 0;
-      const content = await wholeFile(ctx, f.path);
+      let content: string;
+      try {
+        content = await wholeFile(ctx, f.path);
+      } catch (err) {
+        if (ctx.signal.aborted) throw err;
+        skipped.push(f.path);
+        continue;
+      }
       const lines = content.split('\n');
       for (let i = 0; i < lines.length; i++) {
         const line = lines[i].length > 4000 ? lines[i].slice(0, 4000) : lines[i];
@@ -148,7 +173,7 @@ export const searchProject = tool({
       }
       if (matches.length >= max && truncated) break;
     }
-    return { matches, filesMatched: hit.size, filesSearched: files.length, truncated };
+    return { matches, filesMatched: hit.size, filesSearched: files.length - skipped.length, truncated, ...(skipped.length ? { unreadable: skipped } : {}) };
   },
 });
 

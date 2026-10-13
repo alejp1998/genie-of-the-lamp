@@ -5,8 +5,8 @@ Running dev log for the MVP in `ALDINE_AGENT_FORK_SPEC.md` (task brief:
 
 - **Repo:** [github.com/alejp1998/Aladine](https://github.com/alejp1998/Aladine) — work lands on `main`, pushed as we go
   (`upstream` = `trahloff/Aldine`, forked @ `a64536f`, Aldine 0.11.0)
-- **Live review URL (ZeroTier):** `http://10.211.108.8:8095` — reserved, not serving yet
-  (bound to the ZeroTier IP directly, same pattern as `stt` :9000 and `llama-router` :11439 on this host)
+- **Live review URL (ZeroTier):** **`http://10.211.108.8:8095`**. This is the Vite dev UI bound to the ZeroTier IP only; it proxies to Aldine and the gateway on localhost.
+  - Dev login and the test-project link are in `~/dev/aladine-devdata/README.local.md` on the host. They are kept out of git.
 - **Deployment instructions:** `agent-gateway/README.md` (not written yet)
 
 ## Status
@@ -64,8 +64,25 @@ Running dev log for the MVP in `ALDINE_AGENT_FORK_SPEC.md` (task brief:
     - **Local `gpt-oss-20b`** through the OpenAI-compatible path: about 67 s and a correct answer.
 - 2026-10-13 — Core change: optional `HOST` for Aldine's listen address (default unchanged), in the CHANGELOG. Before it, the dev server was reachable on the campus LAN.
 
+- 2026-10-13 — **Test fixture:** the user's Overleaf export (an 8-page IEEE conference paper, 26 files, 18 MB) was imported into the dev Aldine through the normal ZIP import. It compiles in 2.2 s: 8 pages, 0 errors, 1 warning. **It is not committed** (unpublished paper); it lives only in the dev data directory.
+- 2026-10-13 — **Phase 3, assistant panel, done** (`apps/web/src/assistant/`):
+  - **Panel.** Right-hand pane after the preview, with Aldine's pointer and keyboard resizer. Width is remembered per browser, and open/closed per user and project. On phones it becomes a drawer. A toolbar toggle opens it.
+    - It only appears when `/agent-gateway/config` answers, so a plain Aldine deployment is unchanged.
+  - **Chat.** Streaming over EventSource, which resumes with `Last-Event-ID`.
+    - Tool activity is shown as one line per call (*Reading main.tex… → Read main.tex (lines 1–120 of 436)*), with the exact input and result in an expandable Details.
+    - A context chip shows what will be sent (*main.tex · line 42* / *Selection · 5 lines in intro.tex*).
+    - Stop, a model selector, and a safe Markdown renderer that builds React elements only (no HTML injection).
+  - **Sessions.** A menu with "Your chats" and "Shared with the project". New chat; Share or Make private; Rename; Delete. Shared chats are read-only for collaborators, with a banner saying so. The last chat is remembered per project.
+  - **Core touch.** Small: `Editor.tsx` (toggle, dock, preview width accounts for the panel), `CodePane.tsx` (`getCursorContext()`), and a `/agent-gateway` proxy in `vite.config.ts`.
+  - **Gateway additions.**
+    - Session detail includes the tool-activity history.
+    - The `error` event is renamed `run_error`, because EventSource reserves `error`.
+    - Friendly model labels ("Claude Haiku 5.5").
+    - `search_project` reads files over Aldine's 100 KB cap in line windows and skips unreadable files instead of failing. The live run hit this on `IEEEtran.cls`.
+  - **Tests.** Web 67/67 (new transcript tests), gateway 30/30, both typechecks clean.
+
 ### In progress
-- Phase 3: the assistant panel (right-hand pane, streaming chat, sessions, context capture), served live on the ZeroTier URL.
+- Phase 4: `propose_patch` and a diff card with Accept / Edit / Reject; anchor rebase, then apply, then auto-compile; the `X-Aldine-Agent-Label` attribution core change; a Playwright e2e test with the mock provider.
 
 ### Blocked
 - Nothing.
@@ -84,4 +101,9 @@ See [`agent-gateway/DESIGN.md`](agent-gateway/DESIGN.md) §1 (facts, with file:l
 
 ## Visual verification log
 
-_(per UI milestone: date, what was checked, screenshot path)_
+- **2026-10-13, Phase 3 panel**, at `http://10.211.108.8:8095` (test project), driven by `e2e/assistant-shots.mjs`. Screenshots are in `~/dev/aladine-devdata/shots/` (not committed, because they show the unpublished paper).
+  - `panel-empty-light.png` / `panel-empty-dark.png`: empty state with suggestions and the context chip. Matches Aldine's header, buttons, inputs and violet agent mark in both themes.
+  - `panel-running.png` / `panel-answer-light.png`: a real Claude Haiku 5.5 run on the paper ("do all `\ref` targets have labels + three contributions"). It made 8 tool calls with live activity lines, one red failure (the 100 KB cap, since fixed), and gave a correct formatted answer.
+  - `panel-reopened-dark.png`: the chat reopened from the session menu. History is restored, and Details show the exact tool input and result.
+  - `panel-phone.png` (390×844): the drawer over the editor, composer visible.
+  - Fixed after review: a long chat title wrapped the header onto three rows; the phone drawer pushed the composer below the screen.

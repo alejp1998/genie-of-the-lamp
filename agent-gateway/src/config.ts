@@ -59,6 +59,13 @@ function normBase(p: string | undefined): string {
   return s.startsWith('/') ? s : '/' + s;
 }
 
+/** "claude-haiku-5-5" → "Claude Haiku 5.5"; local models say so. */
+export function modelLabel(provider: string, model: string): string {
+  const m = /^claude-([a-z]+)-(\d+)(?:-(\d+))?$/.exec(model);
+  if (m) return `Claude ${m[1][0].toUpperCase()}${m[1].slice(1)} ${m[2]}${m[3] ? `.${m[3]}` : ''}`;
+  return provider === 'local' ? `${model} (local)` : model;
+}
+
 export function parseModelRef(ref: string, providers: ProviderConfig[]): ModelRef {
   const i = ref.indexOf(':');
   if (i <= 0) throw new Error(`Model "${ref}" must be written as <provider>:<model>, e.g. anthropic:claude-haiku-5-5`);
@@ -67,7 +74,7 @@ export function parseModelRef(ref: string, providers: ProviderConfig[]): ModelRe
   if (!providers.some((p) => p.id === provider)) {
     throw new Error(`Model "${ref}" names provider "${provider}", which is not configured`);
   }
-  return { provider, model, label: model };
+  return { provider, model, label: modelLabel(provider, model) };
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
@@ -100,11 +107,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   if (!providers.some((p) => p.id === defaultProvider)) {
     throw new Error(`AGENT_DEFAULT_PROVIDER="${defaultProvider}" is not a configured provider (configured: ${providers.map((p) => p.id).join(', ')})`);
   }
-  const defaultModel: ModelRef = {
-    provider: defaultProvider,
-    model: env.AGENT_DEFAULT_MODEL || defaults[defaultProvider],
-    label: env.AGENT_DEFAULT_MODEL || defaults[defaultProvider],
-  };
+  const defaultModelId = env.AGENT_DEFAULT_MODEL || defaults[defaultProvider];
+  const defaultModel: ModelRef = { provider: defaultProvider, model: defaultModelId, label: modelLabel(defaultProvider, defaultModelId) };
 
   // AGENT_MODELS is the admin allowlist the UI may offer; the default is always included.
   const models: ModelRef[] = [defaultModel];
@@ -113,7 +117,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     if (!models.some((x) => x.provider === m.provider && x.model === m.model)) models.push(m);
   }
   if (env.LOCAL_LLM_BASE_URL && env.LOCAL_LLM_MODEL && !models.some((m) => m.provider === 'local')) {
-    models.push({ provider: 'local', model: env.LOCAL_LLM_MODEL, label: `${env.LOCAL_LLM_MODEL} (local)` });
+    models.push({ provider: 'local', model: env.LOCAL_LLM_MODEL, label: modelLabel('local', env.LOCAL_LLM_MODEL) });
   }
 
   const effort = (env.AGENT_EFFORT || 'medium') as Effort;

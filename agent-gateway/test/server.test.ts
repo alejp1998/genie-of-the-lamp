@@ -103,6 +103,8 @@ test('a message streams a run with context, tool activity and text', async () =>
   assert.match(first.blocks[0].text, /open file: intro\.tex · cursor at line 2/);
   assert.match(first.blocks[0].text, /latest compile: failed with 1 error/);
   assert.equal(detail.activeRunId, null);
+  assert.ok(detail.activity.some((e: any) => e.type === 'tool_end' && e.data.summary === 'Read intro.tex (4 lines)'));
+  assert.ok(!detail.activity.some((e: any) => e.type === 'text'));
   // the gateway used the user's project credential, never the browser cookie
   assert.ok(aldine.calls.every((c) => c.token === 'tok-u-alice-p1'));
 });
