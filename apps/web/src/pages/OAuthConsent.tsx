@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { BrandMark } from '../brand';
 import { Link } from 'react-router-dom';
 import { api, AuthUser, OAuthApiError, OAuthClientInfo, ProjectSummary } from '../api';
 import { LoginScreen, useAuth } from '../components/Auth';
@@ -19,13 +20,13 @@ export function describeClientError(err: unknown): { message: string; detail?: s
       case 'invalid_redirect_uri':
         return { message: 'The app’s return address doesn’t match what it registered. Start the connection again from the app.', detail: err.message };
       case 'invalid_client':
-        return { message: 'Aldine doesn’t recognize the app that sent you here. Start the connection again from the app; if it keeps failing, the app needs to register again.', detail: err.message };
+        return { message: 'LaTeX Genie doesn’t recognize the app that sent you here. Start the connection again from the app; if it keeps failing, the app needs to register again.', detail: err.message };
       case 'invalid_request':
         return { message: 'This link is incomplete — start the connection again from the app.', detail: err.message };
     }
     return { message: 'Could not check the app that asked for access.', detail: err.message };
   }
-  if (err instanceof TypeError) return { message: 'Aldine didn’t answer — check your connection and reload this page.' };
+  if (err instanceof TypeError) return { message: 'LaTeX Genie didn’t answer — check your connection and reload this page.' };
   return { message: 'Could not check the app that asked for access.', detail: err instanceof Error ? err.message : undefined };
 }
 
@@ -66,7 +67,7 @@ export default function OAuthConsent() {
     return (
       <div className="login">
         <div className="login__card consent" data-testid="oauth-error">
-          <h1 className="home__brand" style={{ fontSize: 'var(--text-3xl)', marginBottom: 2 }}>aldine<em>.</em></h1>
+          <BrandMark style={{ fontSize: 'var(--text-3xl)', marginBottom: 2 }} />
           <p className="home__tag" style={{ marginBottom: 14 }}>This connection request can’t continue.</p>
           <p className="consent__error" title={client.detail}>{client.message}</p>
           <p className="consent__hint">Nothing was granted. Go back to the app that sent you here and start the connection again.</p>
@@ -137,7 +138,7 @@ function ConsentStep({ client, params, onSessionEnded }: { client: OAuthClientIn
         return;
       }
       setError(err instanceof TypeError
-        ? 'Aldine didn’t answer — check your connection and try Allow again.'
+        ? 'LaTeX Genie didn’t answer — check your connection and try Allow again.'
         : err instanceof Error ? err.message : 'Something went wrong — try again.');
       setBusy(null);
     }
@@ -149,11 +150,11 @@ function ConsentStep({ client, params, onSessionEnded }: { client: OAuthClientIn
   return (
     <div className="login">
       <div className="login__card consent" data-testid="oauth-consent">
-        <h1 className="home__brand" style={{ fontSize: 'var(--text-3xl)', marginBottom: 2 }}>aldine<em>.</em></h1>
+        <BrandMark style={{ fontSize: 'var(--text-3xl)', marginBottom: 2 }} />
         <p className="home__tag" style={{ marginBottom: 18 }}>Connect an app to your projects.</p>
 
         <h2 className="consent__title">
-          <span className="consent__client" data-testid="oauth-client-name">{client.name}</span> wants to work in your Aldine projects
+          <span className="consent__client" data-testid="oauth-client-name">{client.name}</span> wants to work in your LaTeX Genie projects
         </h2>
         <p className="consent__origin">
           {client.kind === 'cimd' ? 'Identified by' : 'Registered from'} <code>{client.host}</code>

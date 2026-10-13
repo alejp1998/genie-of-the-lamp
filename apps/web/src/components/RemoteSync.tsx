@@ -145,7 +145,7 @@ export default function RemoteSync({ projectId, link, autopush, isOwner, onPulle
         {autopush ? 'Autopush on' : 'Autopush off'}
       </button>
       <button className="btn btn--small" onClick={pull} disabled={!!busy} data-testid={`${p}-pull-btn`} title={`Pull from ${d.label}`}>{busy === 'pull' ? '…' : 'Pull'}</button>
-      <button className="btn btn--small" onClick={() => { setMessage('Update from Aldine'); setShowPush(true); }} disabled={!!busy} data-testid={`${p}-push-btn`} title={`Push to ${d.label}`}>{busy === 'push' ? '…' : 'Push'}</button>
+      <button className="btn btn--small" onClick={() => { setMessage('Update from LaTeX Genie'); setShowPush(true); }} disabled={!!busy} data-testid={`${p}-push-btn`} title={`Push to ${d.label}`}>{busy === 'push' ? '…' : 'Push'}</button>
 
       {showPush && (
         <div className="modal-backdrop" onClick={() => setShowPush(false)}>
@@ -153,10 +153,10 @@ export default function RemoteSync({ projectId, link, autopush, isOwner, onPulle
             <h2 style={{ marginBottom: 8 }}>Push to {d.label}</h2>
             <p className="modal__sub" style={{ marginBottom: 10 }}>{link.fullName} · {branchInfo?.current}</p>
             <input className="input" style={{ width: '100%' }} value={message} data-testid="push-message" autoFocus
-              onChange={(e) => setMessage(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && doPush(message.trim() || 'Update from Aldine')} placeholder="Commit message" />
+              onChange={(e) => setMessage(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && doPush(message.trim() || 'Update from LaTeX Genie')} placeholder="Commit message" />
             <div className="modal__row" style={{ marginTop: 12 }}>
               <button className="btn" onClick={() => setShowPush(false)}>Cancel</button>
-              <button className="btn btn--primary" onClick={() => doPush(message.trim() || 'Update from Aldine')} data-testid="push-confirm">Commit &amp; push</button>
+              <button className="btn btn--primary" onClick={() => doPush(message.trim() || 'Update from LaTeX Genie')} data-testid="push-confirm">Commit &amp; push</button>
             </div>
           </div>
         </div>
@@ -183,7 +183,7 @@ export default function RemoteSync({ projectId, link, autopush, isOwner, onPulle
             <p className="modal__sub">Your changes and {d.label}'s have diverged{conflicts.length ? ' in:' : '.'}</p>
             {conflicts.length > 0 && <ul className="conflict__list">{conflicts.map((f) => <li key={f}>{f}</li>)}</ul>}
             <p style={{ fontSize: 'var(--text-s)', color: 'var(--text-2)', lineHeight: 1.5 }}>
-              Aldine kept your local version. You can discard your local changes and take {d.label}'s version, or cancel and reconcile manually.
+              LaTeX Genie kept your local version. You can discard your local changes and take {d.label}'s version, or cancel and reconcile manually.
             </p>
             <div className="modal__row" style={{ marginTop: 12 }}>
               <button className="btn" onClick={() => setConflicts(null)}>Cancel</button>

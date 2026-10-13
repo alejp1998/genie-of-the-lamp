@@ -1,4 +1,5 @@
 import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { BRAND_NAME } from '../brand';
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api, ApiError, CompileResult, ImportedProject, ProjectDetail, TreeEntry, Comment, localUser, accountIdentity } from '../api';
 import { normalizeDeepLinkPath, resolveDeepLinkFile } from '../util/deepLink';
@@ -41,7 +42,7 @@ import { agentDisplayName, isAgentAuthor } from '../util/agentAuthor';
 import FilePreview, { PREVIEWABLE } from '../components/FilePreview';
 import { useVirtualDocs, VirtualDocView, VirtualTabs } from '../components/VirtualDocs';
 import { CHANGE_EVENT } from '../assistant/changeTarget';
-import { AssistantDock, AssistantToggle, EdgeResizer, SIDEBAR_DEFAULTS, SidebarAssistant, useAssistantDock } from '../assistant/Dock';
+import { AssistantBar, AssistantDock, EdgeResizer, SIDEBAR_DEFAULTS, SidebarAssistant, useAssistantDock } from '../assistant/Dock';
 import type { EditorContext } from '../assistant/api';
 import { COMMENT_EVENT } from '../assistant/selectionActions';
 
@@ -827,21 +828,24 @@ export default function Editor() {
 
   // Forward SyncTeX: show a source line in the PDF, flashing just `text`
   // (the word or selection) inside the boxes that line typeset to.
-  const showInPdf = useCallback(async (file: string, line: number, text: string | null, occurrence = 1, quiet = false) => {
+  const showInPdf = useCallback(async (file: string, line: number, text: string | null, occurrence = 1, quiet = false, context?: { before?: string; after?: string }) => {
     try {
       const res = await api.synctex(id, branch, { direction: 'forward', file, line, column: 0 });
       const recs = (res.records ?? []).filter((r) => r.page != null && (r.y != null || r.v != null));
       if (!recs.length) { if (!quiet) toast('No PDF location for this line — typeset first', 'error'); return; }
-      const page = Number(recs[0].page);
-      const on = recs.filter((r) => Number(r.page) === page);
       const num = (v: unknown, d = 0) => (v == null || Number.isNaN(Number(v)) ? d : Number(v));
-      const region = {
-        left: Math.min(...on.map((r) => num(r.x))),
-        right: Math.max(...on.map((r) => num(r.x) + num(r.w ?? r.W))),
-        top: Math.min(...on.map((r) => num(r.y ?? r.v) - num(r.h ?? r.H, 10))),
-        bottom: Math.max(...on.map((r) => Math.max(num(r.y ?? r.v), num(r.v ?? r.y)) + 2)),
-      };
-      pdfRef.current?.showForward(page, num(recs[0].y ?? recs[0].v), num(recs[0].h ?? recs[0].H, 12), { region, text, occurrence });
+      const box = (r: Record<string, number | string>) => ({ left: num(r.x), right: num(r.x) + num(r.w ?? r.W), top: num(r.y ?? r.v) - num(r.h ?? r.H, 10), bottom: Math.max(num(r.y ?? r.v), num(r.v ?? r.y)) + 2 });
+      // A source line can typeset across a page or column break: every page it reaches, in order, with its boxes.
+      const spots: { page: number; boxes: ReturnType<typeof box>[] }[] = [];
+      for (const r of recs) {
+        const p = Number(r.page);
+        const s = spots.find((x) => x.page === p) ?? (spots.push({ page: p, boxes: [] }), spots[spots.length - 1]);
+        s.boxes.push(box(r));
+      }
+      const first = spots[0].boxes[0];
+      const firstPage = spots[0].page;
+      spots.sort((a, b) => a.page - b.page);
+      pdfRef.current?.showForward(firstPage, first.bottom - 2, first.bottom - first.top, { first, spots, text, occurrence, ...context });
     } catch {
       if (!quiet) toast('Jump unavailable for this file', 'error');
     }
@@ -852,7 +856,7 @@ export default function Editor() {
     if (!activeFile) return;
     const t = codeRef.current?.pdfTarget();
     if (!t) return;
-    await showInPdf(activeFile, t.line, t.text, t.occurrence);
+    await showInPdf(activeFile, t.line, t.text, t.occurrence, false, { before: t.before, after: t.after });
   }, [activeFile, showInPdf]);
 
   // An accepted assistant change: open its file at the changed line and, once
@@ -936,7 +940,7 @@ export default function Editor() {
       { id: 'theme', group: 'View', title: 'Toggle light/dark theme', run: () => { toggleTheme(); } },
       { id: 'settings', group: 'View', title: 'Project settings: compiler, main document, TeX Live', run: () => setSettingsOpen(true) },
       { id: 'download-zip', group: 'File', title: `Download the project source as ZIP (${branch})`, run: () => { window.location.assign(api.archiveUrl(id, branch)); } },
-      { id: 'about', group: 'View', title: 'About Aldine and its source code', run: () => setAboutOpen(true) },
+      { id: 'about', group: 'View', title: 'About LaTeX Genie and its source code', run: () => setAboutOpen(true) },
       ...(visualEnabled
         ? [{ id: 'mode', group: 'View', title: mode === 'visual' ? 'Switch to Source editing' : 'Switch to Visual editing', run: () => switchMode(mode === 'visual' ? 'source' : 'visual') }]
         : [{ id: 'experimental-visual', group: 'View', title: 'Enable experimental Visual editor', run: () => { localStorage.setItem('aldine.experimental.visualEditor', '1'); location.reload(); } }]),
@@ -998,6 +1002,12 @@ export default function Editor() {
   }, [files, activeFile, id, branch, auto, spellcheck, doCompile, toggleAuto, jumpToPdf, setEngine, setStopOnFirstError, project?.stopOnFirstError, project?.remote, insertAtCursor, loadFiles, loadProject, toast]);
 
   // Where the assistant answers, it covers what the one-shot "Fix" plugin did.
+  // The browser tab names the project.
+  useEffect(() => {
+    if (!project?.name) return;
+    document.title = `${project.name} · ${BRAND_NAME}`;
+    return () => { document.title = BRAND_NAME; };
+  }, [project?.name]);
   const [tabPrefs, setTabPrefs] = useState(loadTabPrefs);
   const optionalPanels = dock.config ? pluginPanels.filter((p) => p.id !== 'plugin:aifix') : pluginPanels;
   const shownPanels = optionalPanels.filter((p) => tabShown(tabPrefs, p.id, !!dock.config));
@@ -1103,7 +1113,6 @@ export default function Editor() {
         <button className="btn" onClick={() => setSettingsOpen(true)} data-testid="project-settings-open" title="Project settings: compiler, main document, TeX Live">Settings</button>
         {/* With the assistant, Comment lives in the selection toolbar. */}
         {!dock.config && <button className="btn" onClick={startComment} data-testid="add-comment" title="Comment on the selected text">Comment</button>}
-        <AssistantToggle dock={dock} />
         <Presence users={users} />
         <button className="btn btn--ghost sidebar-toggle" onClick={() => setSidebarHidden((h) => !h)} aria-pressed={!sidebarHidden} data-testid="sidebar-toggle" title="Show or hide the file tree">
           {sidebarHidden ? 'Files' : 'Hide files'}
@@ -1244,6 +1253,7 @@ export default function Editor() {
               <div className="sidebar__assistant sidebar__assistant--below" style={{ height: `${dock.belowFraction * 100}%` }}><SidebarAssistant {...sidebarAssistantProps} /></div>
             </>
           )}
+          <AssistantBar dock={dock} />
         </aside>
         {dock.config && dock.placement !== 'right' && !sidebarHidden && (
           <EdgeResizer

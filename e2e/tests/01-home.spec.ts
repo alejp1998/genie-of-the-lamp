@@ -3,7 +3,7 @@ import { test, expect } from '../fixtures';
 test.describe('home', () => {
   test('create a project from the home screen', async ({ page }) => {
     await page.goto('/');
-    await expect(page.locator('.home__brand')).toContainText('aldine');
+    await expect(page.locator('.home__brand')).toContainText('LaTeX Genie');
     await page.getByTestId('new-project').click();
     await page.getByTestId('new-project-name').fill('My First Paper');
     await page.getByTestId('create-project').click();
@@ -73,7 +73,7 @@ test.describe('source offer', () => {
     await expect(about).toContainText('Affero General Public License');
     await expect(about.getByTestId('about-source')).toHaveAttribute(
       'href',
-      'https://github.com/trahloff/Aldine',
+      'https://github.com/alejp1998/genie-of-the-lamp',
     );
   });
 });

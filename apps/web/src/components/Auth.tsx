@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState, type JSX } from 'react';
+import { BrandMark } from '../brand';
 import { withBase } from '../basePath';
 import { api, AuthUser, OAuthProviderInfo } from '../api';
 
@@ -149,7 +150,7 @@ export function LoginScreen({ providers, passwordAuth, onAuthed, heading, regist
   return (
     <div className="login">
       <div className="login__card">
-        <h1 className="home__brand" style={{ fontSize: 'var(--text-3xl)', marginBottom: 2 }}>aldine<em>.</em></h1>
+        <BrandMark style={{ fontSize: 'var(--text-3xl)', marginBottom: 2 }} />
         <p className="home__tag" style={{ marginBottom: 18 }}>{title}</p>
 
         {providers.map((p) => (

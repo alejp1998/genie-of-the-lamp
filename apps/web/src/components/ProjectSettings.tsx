@@ -216,7 +216,7 @@ export default function ProjectSettings({ project, branch, files, autoTypeset, i
             <span className="settings__label">Source</span>
             <span className="settings__control settings__control--check">
               <a className="btn" href={api.archiveUrl(project.id, branch)} download data-testid="settings-download-zip">Download as ZIP</a>
-              <span className="settings__hint">Every file on {branch}; imports back into Aldine, or into Overleaf</span>
+              <span className="settings__hint">Every file on {branch}; imports back into LaTeX Genie (or Aldine), or into Overleaf</span>
             </span>
           </div>
         </section>

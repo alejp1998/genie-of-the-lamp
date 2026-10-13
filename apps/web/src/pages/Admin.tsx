@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { BrandMark } from '../brand';
 import { Link } from 'react-router-dom';
 import { api, ApiError, AdminStats, AdminUserRow } from '../api';
 import { useAuth } from '../components/Auth';
@@ -78,7 +79,7 @@ export default function Admin() {
       <div className="home__inner">
         <div className="home__bar">
           <div>
-            <h1 className="home__brand">aldine<em>.</em></h1>
+            <BrandMark />
             <p className="home__tag">Server admin</p>
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>

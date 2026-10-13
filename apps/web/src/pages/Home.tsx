@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { BrandMark } from '../brand';
 import { Link, useNavigate } from 'react-router-dom';
 import { api, ApiError, ProjectSummary, RemoteInfo, TemplateCategory, TemplateInfo, TemplateRepoState } from '../api';
 import { useToast } from '../components/Toast';
@@ -281,8 +282,8 @@ export default function Home() {
       <div className="home__inner">
         <div className="home__bar">
           <div>
-            <h1 className="home__brand">aldine<em>.</em></h1>
-            <p className="home__tag">Write LaTeX together. Fast, versioned, yours.</p>
+            <BrandMark />
+            <p className="home__tag">Write LaTeX together, with a research assistant that changes nothing you have not approved.</p>
           </div>
           <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
             <button
@@ -538,7 +539,7 @@ export default function Home() {
                 <p className="tpl-choice" data-testid="template-choice">
                   Starting from {chosen ? chosen.name : 'the built-in article'}
                   {chosen?.license ? ` (${chosen.license})` : ''}
-                  {chosen?.kit ? `. Aldine downloads the official kit from ${chosen.kit.host} when you create the project.` : ''}
+                  {chosen?.kit ? `. LaTeX Genie downloads the official kit from ${chosen.kit.host} when you create the project.` : ''}
                 </p>
               </>
             )}

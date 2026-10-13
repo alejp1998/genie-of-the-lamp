@@ -56,7 +56,7 @@ export interface CodePaneHandle {
   insertAtCursor(text: string): void;
   currentLine(): number | null;
   /** What the PDF should show for the cursor: its line, the selection or the word under the cursor as it prints, and which occurrence of it in that line. */
-  pdfTarget(): { line: number; text: string | null; occurrence: number } | null;
+  pdfTarget(): { line: number; text: string | null; occurrence: number; before?: string; after?: string } | null;
   getSelection(): { from: number; to: number; quote: string } | null;
   /** The selection with the rest of its first and last lines: what a comment on it is about, in context. */
   getSelectionLines(): { before: string; quote: string; after: string; fromLine: number } | null;
@@ -255,7 +255,17 @@ const CodePane = forwardRef<CodePaneHandle, Props>(function CodePane({ projectId
         }
       }
       const before = latexToPlain(state.sliceDoc(line.from, start));
-      return { line: line.number, text, occurrence: text ? countIn(before, text) + 1 : 1 };
+      if (!text) {
+        // On a command, a \cite, math or a space: the nearest word that prints, before the cursor or else after it.
+        const prev = before.match(/[\p{L}\p{N}][\p{L}\p{N}'’-]*(?=[^\p{L}\p{N}]*$)/u)?.[0];
+        if (prev && prev.length >= 2) return { line: line.number, text: prev, occurrence: countIn(before, prev) };
+        const next = latexToPlain(state.sliceDoc(start, line.to)).match(/[\p{L}\p{N}][\p{L}\p{N}'’-]*/u)?.[0];
+        return { line: line.number, text: next && next.length >= 2 ? next : null, occurrence: next ? countIn(before, next) + 1 : 1 };
+      }
+      // The printed words around it, so the PDF match can be told apart from the same word nearby.
+      const end = sel.empty ? start + text.length : sel.to;
+      const after = latexToPlain(state.sliceDoc(end, Math.min(line.to, end + 200)));
+      return { line: line.number, text, occurrence: countIn(before, text) + 1, before: before.split(' ').slice(-3).join(' '), after: after.split(' ').slice(0, 3).join(' ') };
     },
     currentLine() {
       const view = viewRef.current;

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useImperativeHandle, forwardRef, useRef, useState } from 'react';
 import * as pdfjs from 'pdfjs-dist';
 import { shortcut } from '../platform';
-import { findInRegion, findMatches, type Match, type PageText, type Region } from './pdfFind';
+import { findInBoxes, findMatches, type Match, type Measure, type PageText, type Region } from './pdfFind';
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
 
@@ -11,7 +11,7 @@ export interface PdfPaneHandle {
    * With `text`, only that text is flashed: its `occurrence`-th match inside
    * `region` (the boxes the source line typeset to); otherwise the band.
    */
-  showForward(page: number, y: number, h?: number, target?: { region?: Region; text?: string | null; occurrence?: number }): void;
+  showForward(page: number, y: number, h?: number, target?: { first?: Region; spots?: { page: number; boxes: Region[] }[]; text?: string | null; occurrence?: number; before?: string; after?: string }): void;
   /** Opens the find bar (Ctrl/Cmd+F while the preview has focus does the same). */
   openFind(): void;
 }
@@ -39,6 +39,15 @@ interface Props {
   onRendered?(): void;
 }
 
+/** Text widths from a canvas in the item's font family: proportional fonts put a word where it really is in a run of text. */
+let measureCtx: CanvasRenderingContext2D | null | undefined;
+const measureText: Measure = (text, family) => {
+  if (measureCtx === undefined) measureCtx = typeof document !== 'undefined' ? document.createElement('canvas').getContext('2d') : null;
+  if (!measureCtx) return text.length;
+  measureCtx.font = `100px ${family || 'serif'}`;
+  return measureCtx.measureText(text).width;
+};
+
 const PdfPane = forwardRef<PdfPaneHandle, Props>(function PdfPane({ pdfUrl, branch, status, zoom = 1, hasErrors = false, stale = false, ready = true, hasTex = true, onFirstOpen, onInverse, onRendered }, ref) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
@@ -52,7 +61,8 @@ const PdfPane = forwardRef<PdfPaneHandle, Props>(function PdfPane({ pdfUrl, bran
 
   // ---- find in PDF ----
   const docRef = useRef<Awaited<ReturnType<typeof pdfjs.getDocument>['promise']> | null>(null);
-  const textRef = useRef<{ url: string | null; pages: Promise<PageText[]> | null }>({ url: null, pages: null });
+  /** Page texts of the document on screen. Keyed by the document object: a URL can be refetched as a new document. */
+  const textRef = useRef<{ doc: unknown; pages: Promise<PageText[]> | null }>({ doc: null, pages: null });
   const [findOpen, setFindOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [matches, setMatches] = useState<Match[]>([]);
@@ -63,21 +73,33 @@ const PdfPane = forwardRef<PdfPaneHandle, Props>(function PdfPane({ pdfUrl, bran
   const pageTexts = useCallback((): Promise<PageText[]> => {
     const doc = docRef.current;
     if (!doc) return Promise.resolve([]);
-    if (textRef.current.url !== pdfUrl || !textRef.current.pages) {
+    if (textRef.current.doc !== doc || !textRef.current.pages) {
       textRef.current = {
-        url: pdfUrl,
+        doc,
         pages: (async () => {
           const out: PageText[] = [];
           for (let i = 1; i <= doc.numPages; i++) {
             const page = await doc.getPage(i);
             const tc = await page.getTextContent();
-            out.push({ view: page.view, items: tc.items.filter((it): it is typeof it & { str: string } => 'str' in it) as unknown as PageText['items'] });
+            const styles = tc.styles as Record<string, { fontFamily?: string; ascent?: number; descent?: number }>;
+            out.push({
+              view: page.view,
+              items: tc.items
+                .filter((it): it is typeof it & { str: string } => 'str' in it)
+                .map((it) => {
+                  const st = styles[(it as { fontName?: string }).fontName ?? ''];
+                  return { ...(it as unknown as PageText['items'][number]), family: st?.fontFamily, ascent: st?.ascent, descent: st?.descent };
+                }),
+            });
           }
           return out;
         })(),
       };
     }
-    return textRef.current.pages!;
+    const pages = textRef.current.pages!;
+    // A read that fails (a new typeset replaced the document mid-way) must not stick: the next search retries.
+    pages.catch(() => { if (textRef.current.pages === pages) textRef.current.pages = null; });
+    return pages;
   }, [pdfUrl]);
 
   // Re-run on a new PDF (each typeset) and when the query changes.
@@ -87,7 +109,7 @@ const PdfPane = forwardRef<PdfPaneHandle, Props>(function PdfPane({ pdfUrl, bran
     const t = setTimeout(() => {
       pageTexts().then((pages) => {
         if (cancelled) return;
-        const m = findMatches(pages, query);
+        const m = findMatches(pages, query, 1000, measureText);
         setMatches(m);
         setCurrent((c) => (c < m.length ? c : 0));
       }).catch(() => {});
@@ -134,10 +156,11 @@ const PdfPane = forwardRef<PdfPaneHandle, Props>(function PdfPane({ pdfUrl, bran
 
   useImperativeHandle(ref, () => ({
     showForward(page, y, h = 12, target) {
-      const info = pageInfo.current[page - 1];
       const scroller = scrollRef.current;
-      if (!info || !scroller) return;
-      const flashAt = (rects: { left: number; top: number; width: number; height: number }[]) => {
+      if (!scroller || !pageInfo.current[page - 1]) return;
+      const flashAt = (pageNo: number, rects: { left: number; top: number; width: number; height: number }[]) => {
+        const info = pageInfo.current[pageNo - 1];
+        if (!info) return;
         for (const r of rects) {
           const el = document.createElement('div');
           el.className = 'pdf-flash';
@@ -149,24 +172,45 @@ const PdfPane = forwardRef<PdfPaneHandle, Props>(function PdfPane({ pdfUrl, bran
           setTimeout(() => el.remove(), 1100);
         }
       };
+      const scrollTo = (pageNo: number, top: number) => {
+        const info = pageInfo.current[pageNo - 1];
+        if (info) scroller.scrollTo({ top: info.el.offsetTop + top * info.scale - scroller.clientHeight / 3, behavior: 'smooth' });
+      };
+      // Not found as text: the first line the source line typeset to, never more.
       const band = () => {
-        scroller.scrollTo({ top: info.el.offsetTop + y * info.scale - scroller.clientHeight / 3, behavior: 'smooth' });
-        const r = target?.region;
-        flashAt([r
+        const info = pageInfo.current[page - 1]!;
+        const r = target?.first;
+        scrollTo(page, y);
+        flashAt(page, [r
           ? { left: r.left, top: r.top, width: r.right - r.left, height: Math.max(r.bottom - r.top, 8) }
           : { left: 0, top: y - h, width: info.el.clientWidth / info.scale, height: Math.max(16 / info.scale, h * 2) }]);
       };
-      if (!target?.text || !target.region) { band(); return; }
-      const { text, region, occurrence } = target;
+      if (!target?.text || !target.spots?.length) { band(); return; }
+      const { text, spots, occurrence } = target;
       pageTexts().then((pages) => {
+        // First the word with its printed neighbours: unique where the bare word is not.
+        const b = (target.before ?? '').split(' ').filter(Boolean);
+        const a = (target.after ?? '').split(' ').filter(Boolean);
+        const phrases = [...new Set([[...b.slice(-2), text, ...a.slice(0, 2)], [...b.slice(-2), text], [text, ...a.slice(0, 2)]]
+          .filter((p) => p.length > 1).map((p) => p.join(' ')))];
+        for (const phrase of phrases) {
+          const wide = spots.map((sp) => ({ page: sp.page, boxes: [{ left: -1e6, top: -1e6, right: 1e6, bottom: 1e6 }] }));
+          const pm = findInBoxes(pages, spots, phrase, 1, measureText) ?? findInBoxes(pages, wide, phrase, 1, measureText);
+          if (!pm) continue;
+          const word = findInBoxes(pages, [{ page: pm.page, boxes: pm.rects.map((r) => ({ left: r.left, right: r.left + r.width, top: r.top, bottom: r.top + r.height })) }], text, 1, measureText);
+          const hit = word ?? pm;
+          scrollTo(hit.page, hit.rects[0].top);
+          flashAt(hit.page, hit.rects);
+          return;
+        }
         const words = text.split(' ').filter(Boolean);
         const longest = [...words].sort((a, b) => b.length - a.length)[0] ?? '';
         const tries = [...new Set([text, words.slice(0, 6).join(' '), words.slice(0, 3).join(' '), longest.length >= 4 ? longest : ''])].filter(Boolean);
         let m: Match | null = null;
-        for (const t of tries) if (pages[page - 1] && (m = findInRegion(pages[page - 1], t, region, t === text ? occurrence ?? 1 : 1, page))) break;
+        for (const t of tries) if ((m = findInBoxes(pages, spots, t, t === text ? occurrence ?? 1 : 1, measureText))) break;
         if (!m) { band(); return; }
-        scroller.scrollTo({ top: info.el.offsetTop + m.rects[0].top * info.scale - scroller.clientHeight / 3, behavior: 'smooth' });
-        flashAt(m.rects);
+        scrollTo(m.page, m.rects[0].top);
+        flashAt(m.page, m.rects);
       }, band);
     },
     openFind,

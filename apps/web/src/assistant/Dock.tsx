@@ -112,17 +112,23 @@ export function useAssistantDock(projectId: string): Dock {
   return { config, open: !!config && open, width, setOpen, setWidth, placement, setPlacement, sidebarWidth, setSidebarWidth, belowFraction, setBelowFraction, prefill, reserved };
 }
 
-export function AssistantToggle({ dock }: { dock: Dock }) {
-  if (!dock.config) return null;
+/**
+ * The way back to a closed assistant: a slim bar at the foot of the sidebar
+ * (no header button). In the right-pane layout it also shows and hides that
+ * pane. The panel's own header closes it.
+ */
+export function AssistantBar({ dock }: { dock: Dock }) {
+  if (!dock.config || dock.placement === 'tab' || (dock.placement === 'below' && dock.open)) return null;
   return (
     <button
-      className="btn btn--ghost assistant-toggle"
+      className={`sidebar__assistant-bar${dock.open ? ' sidebar__assistant-bar--on' : ''}`}
       onClick={() => dock.setOpen(!dock.open)}
       aria-pressed={dock.open}
       title={dock.open ? 'Hide the assistant' : `Ask ${dock.config.agentLabel} about this project`}
       data-testid="assistant-toggle"
     >
-      <IconSpark /> Assistant
+      <IconSpark /> <span className="sidebar__assistant-bar-label">{dock.config.agentLabel}</span>
+      <span className="sidebar__assistant-bar-hint" aria-hidden="true">{dock.placement === 'right' ? (dock.open ? 'Hide' : 'Show') : 'Open'}</span>
     </button>
   );
 }

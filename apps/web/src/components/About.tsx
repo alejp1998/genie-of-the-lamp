@@ -1,9 +1,9 @@
 import Modal from './Modal';
+import { BRAND_ICON, BRAND_NAME, SOURCE_URL } from '../brand';
 
 declare const __ALDINE_VERSION__: string;
 declare const __ALDINE_REV__: string;
 
-const SOURCE_URL = 'https://github.com/trahloff/Aldine';
 
 /**
  * AGPL section 13: anyone interacting with this instance over a network must be
@@ -14,10 +14,11 @@ const SOURCE_URL = 'https://github.com/trahloff/Aldine';
 export default function About({ onClose }: { onClose: () => void }) {
   const rev = __ALDINE_REV__;
   return (
-    <Modal onClose={onClose} label="About Aldine" testId="about-modal" width={460}>
-      <h2>Aldine</h2>
+    <Modal onClose={onClose} label={`About ${BRAND_NAME}`} testId="about-modal" width={460}>
+      <h2 className="about__title"><img src={BRAND_ICON} alt="" aria-hidden="true" width={40} height={40} /> {BRAND_NAME}</h2>
       <p className="modal__sub">
-        A slim, self-hosted LaTeX collaboration platform. Version {__ALDINE_VERSION__}
+        Collaborative LaTeX with a research-writing assistant, based on{' '}
+        <a href="https://github.com/trahloff/Aldine" target="_blank" rel="noreferrer">Aldine</a>, the slim, self-hosted LaTeX platform. Version {__ALDINE_VERSION__}
         {rev ? <> · build <code>{rev}</code></> : null}
       </p>
       <p className="modal__sub">

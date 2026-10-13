@@ -1,4 +1,5 @@
 import { useRef } from 'react';
+import { BrandMark } from '../brand';
 import Modal from './Modal';
 import { shortcut } from '../platform';
 import { remoteDescriptor, RemoteProviderId } from '../remotes';
@@ -13,10 +14,10 @@ export default function Onboarding({ onNew, onRemote, remotes, onImportZip, onCl
   const zipInput = useRef<HTMLInputElement>(null);
 
   return (
-    <Modal onClose={onClose} label="Welcome to Aldine" testId="onboarding" wide>
+    <Modal onClose={onClose} label="Welcome to LaTeX Genie" testId="onboarding" wide>
       <div className="onboard">
-        <h1 className="home__brand" style={{ fontSize: 'var(--text-3xl)', marginBottom: 2 }}>aldine<em>.</em></h1>
-        <p className="home__tag" style={{ marginBottom: 20 }}>Write LaTeX together — fast, versioned, yours.</p>
+        <BrandMark style={{ fontSize: 'var(--text-3xl)', marginBottom: 2, justifyContent: 'center' }} />
+        <p className="home__tag" style={{ marginBottom: 20 }}>Write LaTeX together, with a research assistant that changes nothing you have not approved.</p>
 
         <div className="onboard__tiles">
           <button className="onboard__tile" onClick={() => start(onNew)} data-testid="onboard-new">

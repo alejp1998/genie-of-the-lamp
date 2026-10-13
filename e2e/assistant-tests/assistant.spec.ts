@@ -132,7 +132,7 @@ test('chats are private until shared; a shared chat is read-only for collaborato
   await expect(alice.getByTestId('assistant-shared-chip')).toBeVisible();
 
   await bob.reload();
-  await bob.getByTestId('assistant-toggle').waitFor();
+  await expect(bob.getByTestId('assistant-toggle').or(bob.getByTestId('assistant-panel'))).toBeVisible();
   if (!(await bob.getByTestId('assistant-panel').isVisible())) await bob.getByTestId('assistant-toggle').click();
   await bob.getByTestId('assistant-session-menu').click();
   await bob.getByTestId('assistant-session-list').getByText('Secret draft question').click();
@@ -377,7 +377,7 @@ test('the assistant sits below the sidebar tabs by default, and can be a sidebar
   await expect(page.getByTestId('tab-assistant')).toHaveClass(/sidebar__tab--active/);
   await page.getByTestId('tab-files').click();
   await expect(page.getByTestId('assistant-panel')).toBeHidden();
-  await expect(page.getByTestId('assistant-toggle')).toHaveAttribute('aria-pressed', 'false');
+  await expect(page.getByTestId('tab-assistant')).not.toHaveClass(/sidebar__tab--active/);
   await page.getByTestId('tab-assistant').click();
   await expect(sidebar.getByTestId('assistant-panel')).toBeVisible();
   // From the header switch straight to the right pane and back to below.
@@ -395,6 +395,12 @@ test('the assistant sits below the sidebar tabs by default, and can be a sidebar
   await expect(page.getByTestId('sidebar-resizer')).toHaveCount(0);
   // Remembered per browser.
   await page.reload();
+  await expect(page.locator('.assistant-dock').getByTestId('assistant-panel')).toBeVisible();
+  // No header button: the bar at the foot of the sidebar hides and shows it.
+  await expect(page.locator('.topbar [data-testid=assistant-toggle], header [data-testid=assistant-toggle]')).toHaveCount(0);
+  await sidebar.getByTestId('assistant-toggle').click();
+  await expect(page.getByTestId('assistant-panel')).toHaveCount(0);
+  await sidebar.getByTestId('assistant-toggle').click();
   await expect(page.locator('.assistant-dock').getByTestId('assistant-panel')).toBeVisible();
 });
 
