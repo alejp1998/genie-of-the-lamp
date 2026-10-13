@@ -911,6 +911,31 @@
 .errors__msg { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .errors__hint { color: var(--text-2); font-size: var(--text-s); margin-top: 1px; }
 
+/* editor area: document tabs beside the project file, file previews */
+.editor-body { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.editor-body[hidden] { display: none; }
+.vtabs { display: flex; gap: 2px; padding: 4px 6px 0; border-bottom: 1px solid var(--hairline); background: var(--bg-inset); overflow-x: auto; flex: none; scrollbar-width: none; }
+.vtabs__tab {
+  display: inline-flex; align-items: center; gap: 2px; max-width: 220px; min-width: 0; flex: none;
+  height: 28px; padding: 0 10px; border: 1px solid transparent; border-bottom: 0; border-radius: var(--radius-s) var(--radius-s) 0 0;
+  background: transparent; color: var(--text-2); font: 500 var(--text-s) var(--font-ui); cursor: pointer;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.vtabs__tab--virtual { padding: 0 2px 0 8px; font-style: italic; }
+.vtabs__tab--active { background: var(--bg-panel); border-color: var(--hairline); color: var(--text); margin-bottom: -1px; }
+.vtabs__label { border: 0; background: none; color: inherit; font: inherit; cursor: pointer; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0; min-width: 0; }
+.vtabs__close { display: inline-flex; border: 0; background: none; color: var(--text-3); padding: 4px; border-radius: var(--radius-xs); cursor: pointer; }
+.vtabs__close:hover { background: var(--bg-hover); color: var(--text); }
+.vdoc { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.vdoc__badge { flex: none; padding: 1px 6px; border-radius: 999px; background: var(--bg-inset); color: var(--text-3); font-size: var(--text-xs); font-weight: 500; }
+.vdoc__diff { flex: 1; min-height: 0; overflow: auto; }
+.vdoc__diff .diff { max-height: none; border-radius: 0; }
+.file-preview { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.file-preview__bar { display: flex; align-items: center; gap: 6px; padding: 4px 10px; border-bottom: 1px solid var(--hairline); flex: none; }
+.file-preview__meta { color: var(--text-3); font-size: var(--text-xs); }
+.file-preview__stage { flex: 1; min-height: 0; overflow: auto; display: flex; align-items: flex-start; justify-content: center; padding: 16px; background: var(--bg-app); }
+.file-preview__stage img { display: block; box-shadow: var(--shadow-card); background: repeating-conic-gradient(#e5e5e5 0% 25%, #fff 0% 50%) 0 0 / 16px 16px; }
+
 /* resizer */
 .resizer {
   width: 9px;

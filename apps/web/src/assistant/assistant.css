@@ -215,3 +215,42 @@
 .proposal__edit-row { display: flex; flex-direction: column; gap: 3px; }
 .proposal__quote { color: var(--text-3); font-family: var(--font-mono); font-size: var(--text-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .proposal__textarea { width: 100%; height: auto; padding: 6px 8px; font: var(--text-s) / 1.45 var(--font-mono); resize: vertical; }
+
+/* composer: attachments, @ and / menus, drop target */
+.assistant__composer--drop { outline: 2px dashed var(--accent); outline-offset: -4px; }
+.assistant__context-row { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.assistant__link { border: 0; background: none; padding: 0; color: var(--accent); font: var(--text-xs) var(--font-ui); cursor: pointer; flex: none; }
+.assistant__link:hover { text-decoration: underline; }
+.assistant__details-label .assistant__link { margin-left: 8px; text-transform: none; letter-spacing: 0; }
+.assistant__chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.assistant__user { display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }
+.assistant__user .assistant__chips { justify-content: flex-end; }
+.assistant__ctx-link { color: var(--text-3); }
+.assistant__chip-att {
+  display: inline-flex; align-items: center; max-width: 220px; height: 24px;
+  border: 1px solid var(--hairline); border-radius: var(--radius-s); background: var(--bg-inset); overflow: hidden;
+}
+.assistant__chip-open { display: inline-flex; align-items: center; gap: 5px; min-width: 0; height: 100%; padding: 0 6px; border: 0; background: none; color: var(--text); font: var(--text-xs) var(--font-ui); cursor: pointer; }
+.assistant__chip-open:hover { background: var(--bg-hover); }
+.assistant__chip-open img { width: 18px; height: 18px; object-fit: cover; border-radius: 3px; }
+.assistant__chip-icon { color: var(--agent); font-weight: 700; }
+.assistant__chip-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.assistant__chip-x { height: 100%; padding: 0 6px; border: 0; border-left: 1px solid var(--hairline); background: none; color: var(--text-3); cursor: pointer; }
+.assistant__chip-x:hover { color: var(--text); background: var(--bg-hover); }
+.assistant__input-wrap { position: relative; }
+.assistant__mention { bottom: calc(100% + 4px); left: 0; right: 0; max-height: 260px; overflow-y: auto; transform-origin: bottom left; }
+.assistant__mention .menu__item { display: flex; justify-content: space-between; gap: 10px; }
+.assistant__mention-label { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--font-mono); font-size: var(--text-xs); }
+.assistant__mention--active { background: var(--accent-fill); color: var(--on-accent); }
+.assistant__mention--active .menu__hint { color: var(--on-accent); opacity: 0.75; }
+
+/* selection actions over the editor (a CodeMirror tooltip) */
+.cm-tooltip:has(> .assistant-sel) { border: 0; background: transparent; box-shadow: none; }
+.assistant-sel {
+  display: flex; gap: 1px; padding: 2px; border-radius: var(--radius-m);
+  background: var(--material-pop); backdrop-filter: var(--material-blur); -webkit-backdrop-filter: var(--material-blur);
+  box-shadow: var(--shadow-pop); font-family: var(--font-ui);
+}
+.assistant-sel__btn { height: 24px; padding: 0 8px; border: 0; border-radius: var(--radius-s); background: none; color: var(--text); font: 500 var(--text-xs) var(--font-ui); cursor: pointer; white-space: nowrap; }
+.assistant-sel__btn:first-child { color: var(--agent); font-weight: 600; }
+.assistant-sel__btn:hover { background: var(--bg-hover); }

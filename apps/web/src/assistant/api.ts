@@ -4,7 +4,8 @@ import { withBase } from '../basePath';
 export const GATEWAY = '/agent-gateway';
 
 export type Block =
-  | { type: 'text'; text: string; meta?: 'context' }
+  | { type: 'text'; text: string; meta?: 'context' | 'attachment'; attachment?: { kind: 'file' | 'text'; name: string; path?: string } }
+  | { type: 'image'; mediaType: string; name?: string; ref: string }
   | { type: 'tool_call'; id: string; name: string; input: unknown }
   | { type: 'tool_result'; id: string; content: string; isError?: boolean }
   | { type: 'opaque' };
@@ -95,6 +96,12 @@ export interface GatewayConfig {
   limits: { maxMessageChars: number };
 }
 
+/** What the composer sends along with the text. */
+export type Attachment =
+  | { kind: 'file'; path: string }
+  | { kind: 'text'; name: string; text: string }
+  | { kind: 'image'; name: string; mediaType: string; data: string };
+
 export interface EditorContext {
   branch: string;
   openFile?: string | null;
@@ -136,8 +143,10 @@ export const gateway = {
   updateSession: (id: string, patch: { title?: string; visibility?: 'private' | 'project' }) =>
     call<{ session: AssistantSession }>(`/sessions/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(patch) }),
   deleteSession: (id: string) => call<void>(`/sessions/${encodeURIComponent(id)}`, { method: 'DELETE' }),
-  send: (id: string, text: string, context: EditorContext, model?: string) =>
-    call<{ run: RunInfo }>(`/sessions/${encodeURIComponent(id)}/messages`, { method: 'POST', body: JSON.stringify({ text, context, ...(model ? { model } : {}) }) }),
+  send: (id: string, text: string, context: EditorContext, model?: string, attachments?: Attachment[]) =>
+    call<{ run: RunInfo }>(`/sessions/${encodeURIComponent(id)}/messages`, { method: 'POST', body: JSON.stringify({ text, context, ...(model ? { model } : {}), ...(attachments?.length ? { attachments } : {}) }) }),
+  /** URL of an image a message carries (block ref "<messageId>/<index>"). */
+  imageUrl: (ref: string) => withBase(`${GATEWAY}/messages/${ref.replace('/', '/blocks/')}`),
   proposal: (id: string) => call<{ proposal: Proposal }>(`/proposals/${encodeURIComponent(id)}`),
   accept: (id: string, parts: AcceptParts = {}) => call<{ proposal: Proposal }>(`/proposals/${encodeURIComponent(id)}/accept`, { method: 'POST', body: JSON.stringify(parts) }),
   reject: (id: string) => call<{ proposal: Proposal }>(`/proposals/${encodeURIComponent(id)}/reject`, { method: 'POST', body: '{}' }),

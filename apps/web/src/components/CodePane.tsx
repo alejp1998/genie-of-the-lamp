@@ -8,6 +8,7 @@ import { defaultKeymap, indentWithTab } from '@codemirror/commands';
 import { searchKeymap, highlightSelectionMatches } from '@codemirror/search';
 import { autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap } from '@codemirror/autocomplete';
 import { latex } from 'codemirror-lang-latex';
+import { assistantSelectionActions } from '../assistant/selectionActions';
 import * as Y from 'yjs';
 import { yCollab, yUndoManagerKeymap } from 'y-codemirror.next';
 import { HocuspocusProvider } from '@hocuspocus/provider';
@@ -136,7 +137,7 @@ export function latexWordCount(src: string): number {
 }
 
 /** Calm, ink-blue syntax palette that flips with the color scheme via CSS vars. */
-const aldineHighlight = HighlightStyle.define([
+export const aldineHighlight = HighlightStyle.define([
   { tag: [t.keyword, t.controlKeyword, t.tagName, t.macroName, t.function(t.variableName)], color: 'var(--syn-command)' },
   { tag: [t.comment, t.lineComment, t.blockComment], color: 'var(--syn-comment)', fontStyle: 'italic' },
   { tag: [t.string, t.attributeValue, t.inserted], color: 'var(--syn-string)' },
@@ -149,7 +150,7 @@ const aldineHighlight = HighlightStyle.define([
   { tag: t.emphasis, fontStyle: 'italic' },
 ]);
 
-const aldineTheme = EditorView.theme({
+export const aldineTheme = EditorView.theme({
   '&': { backgroundColor: 'var(--bg-panel)', color: 'var(--text)' },
   '.cm-cursor': { borderLeftColor: 'var(--text)' },
   '.cm-selectionBackground, &.cm-focused .cm-selectionBackground': { backgroundColor: 'var(--selection) !important' },
@@ -385,6 +386,7 @@ const CodePane = forwardRef<CodePaneHandle, Props>(function CodePane({ projectId
           flashField,
           aldineTheme,
           EditorView.lineWrapping,
+          assistantSelectionActions,
           // browser-native spellcheck on prose (only meaningful for .tex/.md)
           spellComp.of(spellcheckAttrs(spellcheck, filePath)),
           modeComp.of(mode === 'visual' ? visualExtensions(deps) : []),

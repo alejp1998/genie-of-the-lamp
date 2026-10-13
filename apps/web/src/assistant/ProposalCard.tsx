@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import DiffView from '../components/DiffView';
+import { openVirtualDoc } from '../components/VirtualDocs';
 import type { AcceptParts, Proposal } from './api';
 
 interface Props {
@@ -82,6 +83,7 @@ export default function ProposalCard({ proposal: p, canDecide, onAccept, onRejec
       {!editing && (
         <div className="proposal__actions">
           <button className="btn btn--small btn--ghost" onClick={() => setShowDiff((v) => !v)} data-testid="proposal-toggle-diff">{showDiff ? 'Hide diff' : 'View diff'}</button>
+          <button className="btn btn--small btn--ghost" onClick={() => openVirtualDoc({ id: `diff:${p.id}`, title: `Diff · ${p.summary}`, kind: 'diff', content: p.diff })} data-testid="proposal-open-diff">Open in editor</button>
           <span className="toolbar__spacer" />
           {pending && canDecide && (
             <>

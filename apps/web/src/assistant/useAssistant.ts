@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { type AcceptParts, type AssistantSession, type EditorContext, gateway, type GatewayConfig, type Proposal, RUN_EVENT_TYPES, type SessionDetail } from './api';
-import { applyEvent, buildTranscript, type Item, type LiveState } from './transcript';
+import { type AcceptParts, type AssistantSession, type Attachment, type EditorContext, gateway, type GatewayConfig, type Proposal, RUN_EVENT_TYPES, type SessionDetail } from './api';
+import { applyEvent, buildTranscript, type Item, type ItemAttachment, type LiveState } from './transcript';
 
 const lastSessionKey = (projectId: string) => `aldine.assistant.session.${projectId}`;
 
@@ -23,7 +23,8 @@ export interface AssistantState {
   error: string | null;
   loading: boolean;
   select(id: string | null): void;
-  send(text: string, ctx: EditorContext, model?: string): Promise<boolean>;
+  send(text: string, ctx: EditorContext, model?: string, attachments?: Attachment[], previews?: ItemAttachment[]): Promise<boolean>;
+  showError(message: string): void;
   cancel(): void;
   setVisibility(v: 'private' | 'project'): Promise<void>;
   rename(title: string): Promise<void>;
@@ -71,9 +72,9 @@ export function useAssistant(projectId: string, config: GatewayConfig | null): A
     return d;
   }, []);
 
-  const follow = useCallback((sid: string, runId: string, userText: string) => {
+  const follow = useCallback((sid: string, runId: string, userText: string, userAttachments?: ItemAttachment[]) => {
     closeStream();
-    setLive({ runId, userText, items: [], status: 'Starting…', done: false });
+    setLive({ runId, userText, userAttachments, items: [], status: 'Starting…', done: false });
     const es = gateway.events(runId);
     streamRef.current = es;
     let finished = false;
@@ -139,7 +140,7 @@ export function useAssistant(projectId: string, config: GatewayConfig | null): A
     return () => { cancelled = true; closeStream(); };
   }, [config, projectId]);
 
-  const send = useCallback(async (text: string, ctx: EditorContext, model?: string) => {
+  const send = useCallback(async (text: string, ctx: EditorContext, model?: string, attachments?: Attachment[], previews?: ItemAttachment[]) => {
     setError(null);
     try {
       let sid = sessionRef.current;
@@ -152,8 +153,8 @@ export function useAssistant(projectId: string, config: GatewayConfig | null): A
         setDetail({ session, messages: [], runs: [], activity: [], proposals: [], activeRunId: null });
         setSessions((list) => [session, ...list]);
       }
-      const { run } = await gateway.send(sid, text, ctx, model);
-      follow(sid, run.id, text);
+      const { run } = await gateway.send(sid, text, ctx, model, attachments);
+      follow(sid, run.id, text, previews);
       return true;
     } catch (e) {
       setError((e as Error).message);
@@ -238,6 +239,7 @@ export function useAssistant(projectId: string, config: GatewayConfig | null): A
     rename,
     remove,
     dismissError: () => setError(null),
+    showError: (m: string) => setError(m),
     proposals,
     accept,
     reject,

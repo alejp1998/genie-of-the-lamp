@@ -1,8 +1,10 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useDialogs } from '../components/Dialogs';
 import { IconSpark, IconX } from '../components/Icons';
+import { openVirtualDoc } from '../components/VirtualDocs';
 import { useExitGhost } from '../exitGhost';
 import type { EditorContext, GatewayConfig } from './api';
+import Composer, { Chips, type Pending, type Prefill } from './Composer';
 import Markdown from './Markdown';
 import ProposalCard from './ProposalCard';
 import type { Item } from './transcript';
@@ -16,6 +18,10 @@ interface Props {
   getContext(): EditorContext;
   onClose(): void;
   onShowHistory?(): void;
+  /** Project text files for @ references. */
+  getFiles(): string[];
+  /** A prompt sent from an editor selection action. */
+  prefill: Prefill | null;
 }
 
 const SUGGESTIONS = [
@@ -23,15 +29,6 @@ const SUGGESTIONS = [
   'Summarize the open file in three sentences.',
   'Find terms used inconsistently across sections.',
 ];
-
-function contextLabel(ctx: EditorContext): string {
-  if (ctx.selection) {
-    const n = ctx.selection.toLine - ctx.selection.fromLine + 1;
-    return `Selection · ${n} line${n === 1 ? '' : 's'} in ${ctx.openFile ?? 'the open file'}`;
-  }
-  if (ctx.openFile) return `${ctx.openFile}${ctx.cursor ? ` · line ${ctx.cursor.line}` : ''}`;
-  return `Branch ${ctx.branch}`;
-}
 
 function relTime(iso: string): string {
   const s = (Date.now() - Date.parse(iso)) / 1000;
@@ -48,6 +45,18 @@ function pretty(v: unknown): string {
   return JSON.stringify(v, null, 2);
 }
 
+function openToolOutput(item: Extract<Item, { kind: 'tool' }>) {
+  let parsed: any = null;
+  try { parsed = JSON.parse(item.output ?? ''); } catch { /* not JSON */ }
+  const isFile = item.name === 'read_file' && typeof parsed?.content === 'string';
+  openVirtualDoc({
+    id: `tool:${item.id}`,
+    title: isFile ? `${parsed.path} (as read${parsed.from_line ? `, lines ${parsed.from_line}–${parsed.to_line}` : ''})` : `${item.name} result`,
+    kind: isFile ? 'latex' : 'text',
+    content: isFile ? parsed.content : pretty(item.output),
+  });
+}
+
 function ToolLine({ item }: { item: Extract<Item, { kind: 'tool' }> }) {
   const state = item.running ? 'busy' : item.ok === false ? 'error' : 'ok';
   return (
@@ -57,7 +66,10 @@ function ToolLine({ item }: { item: Extract<Item, { kind: 'tool' }> }) {
         <span className="assistant__tool-text">{item.running || !item.summary ? item.activity : item.summary}</span>
       </summary>
       <div className="assistant__details">
-        <div className="assistant__details-label">{item.name}</div>
+        <div className="assistant__details-label">
+          {item.name}
+          {item.output && <button className="assistant__link" onClick={() => openToolOutput(item)} data-testid="assistant-tool-open">Open in editor</button>}
+        </div>
         {item.input !== undefined && <pre>{pretty(item.input)}</pre>}
         {item.output && <><div className="assistant__details-label">Result</div><pre>{pretty(item.output)}</pre></>}
       </div>
@@ -92,7 +104,19 @@ function Transcript({ items, cards }: { items: Item[]; cards: CardHooks }) {
             />
           );
         }
-        if (it.kind === 'user') return <div key={it.key} className="assistant__msg assistant__msg--user" data-testid="assistant-user-msg">{it.text}</div>;
+        if (it.kind === 'user') {
+          return (
+            <div key={it.key} className="assistant__user">
+              {it.text && <div className="assistant__msg assistant__msg--user" data-testid="assistant-user-msg">{it.text}</div>}
+              <Chips items={(it.attachments ?? []).map((a, i) => ({ key: `${it.key}-${i}`, a }))} />
+              {it.context && (
+                <button className="assistant__link assistant__ctx-link" onClick={() => openVirtualDoc({ id: `ctx:${it.key}`, title: 'Context sent with the message', kind: 'text', content: it.context! })} data-testid="assistant-open-context">
+                  Context sent
+                </button>
+              )}
+            </div>
+          );
+        }
         if (it.kind === 'assistant') return <div key={it.key} className="assistant__msg assistant__msg--agent" data-testid="assistant-reply"><Markdown text={it.text} /></div>;
         if (it.kind === 'tool') return <ToolLine key={it.key} item={it} />;
         return <div key={it.key} className={`assistant__notice assistant__notice--${it.level}`} role="status">{it.message}</div>;
@@ -101,15 +125,13 @@ function Transcript({ items, cards }: { items: Item[]; cards: CardHooks }) {
   );
 }
 
-export default function AssistantPanel({ projectId, config, getContext, onClose, onShowHistory }: Props) {
+export default function AssistantPanel({ projectId, config, getContext, onClose, onShowHistory, getFiles, prefill }: Props) {
   const a = useAssistant(projectId, config);
   const dialogs = useDialogs();
-  const [text, setText] = useState('');
   const [model, setModel] = useState(config.defaultModel);
   const [ctx, setCtx] = useState<EditorContext>(() => getContext());
   const [menu, setMenu] = useState<null | 'sessions' | 'actions'>(null);
   const bodyRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLTextAreaElement>(null);
   const headerRef = useRef<HTMLDivElement>(null);
   const stick = useRef(true);
   const leave = useExitGhost();
@@ -140,17 +162,16 @@ export default function AssistantPanel({ projectId, config, getContext, onClose,
   const mine = a.sessions.filter((s) => s.isOwner);
   const shared = a.sessions.filter((s) => !s.isOwner);
 
-  const submit = async (value = text) => {
-    const v = value.trim();
-    if (!v || a.running || readOnly) return;
+  const send = async (text: string, pending: Pending[] = []) => {
+    if (a.running || readOnly) return false;
     const snapshot = getContext();
     setCtx(snapshot);
     stick.current = true;
-    if (await a.send(v, snapshot, model !== config.defaultModel ? model : undefined)) setText('');
+    return a.send(text, snapshot, model !== config.defaultModel ? model : undefined, pending.map((p) => p.attachment), pending.map((p) => p.preview));
   };
 
   const empty = !session && !a.live && !a.loading;
-  const cards: CardHooks = { proposals: a.proposals, canDecide: !readOnly, accept: a.accept, reject: a.reject, ask: (t) => void submit(t), onShowHistory };
+  const cards: CardHooks = { proposals: a.proposals, canDecide: !readOnly, accept: a.accept, reject: a.reject, ask: (t) => void send(t), onShowHistory };
 
   return (
     <aside className="pane assistant" data-testid="assistant-panel" aria-label={`${config.agentLabel} assistant`}>
@@ -169,7 +190,7 @@ export default function AssistantPanel({ projectId, config, getContext, onClose,
           <span className="assistant__caret" aria-hidden="true">▾</span>
         </button>
         <span className="toolbar__spacer" />
-        <button className="btn btn--ghost btn--small" onClick={() => { a.select(null); setMenu(null); inputRef.current?.focus(); }} data-testid="assistant-new-chat" title="Start a new chat">New chat</button>
+        <button className="btn btn--ghost btn--small" onClick={() => { a.select(null); setMenu(null); }} data-testid="assistant-new-chat" title="Start a new chat">New chat</button>
         {session?.isOwner && (
           <button className="btn btn--ghost btn--small" onClick={() => setMenu(menu === 'actions' ? null : 'actions')} aria-haspopup="menu" aria-expanded={menu === 'actions'} aria-label="Chat options" data-testid="assistant-actions">⋯</button>
         )}
@@ -228,7 +249,7 @@ export default function AssistantPanel({ projectId, config, getContext, onClose,
             <p>Ask about this project. The assistant can read and search files, compile, and explain errors. It does not change your files.</p>
             <div className="assistant__suggestions">
               {SUGGESTIONS.map((s) => (
-                <button key={s} className="assistant__suggestion" onClick={() => submit(s)}>{s}</button>
+                <button key={s} className="assistant__suggestion" onClick={() => void send(s)}>{s}</button>
               ))}
             </div>
           </div>
@@ -236,9 +257,10 @@ export default function AssistantPanel({ projectId, config, getContext, onClose,
         <Transcript items={a.items} cards={cards} />
         {a.live && (
           <>
-            {a.live.userText && (
-              <div className="assistant__msg assistant__msg--user" data-testid="assistant-user-msg">{a.live.userText}</div>
-            )}
+            <div className="assistant__user">
+              {a.live.userText && <div className="assistant__msg assistant__msg--user" data-testid="assistant-user-msg">{a.live.userText}</div>}
+              <Chips items={(a.live.userAttachments ?? []).map((att, i) => ({ key: `live-${i}`, a: att }))} />
+            </div>
             <Transcript items={a.live.items} cards={cards} />
             {a.running && (
               <div className="assistant__status" data-testid="assistant-thinking">
@@ -257,40 +279,18 @@ export default function AssistantPanel({ projectId, config, getContext, onClose,
       )}
 
       {!readOnly && (
-        <form className="assistant__composer" onSubmit={(e) => { e.preventDefault(); submit(); }}>
-          <div className="assistant__context" title="Sent with your message so the assistant knows where you are" data-testid="assistant-context">
-            {contextLabel(ctx)}
-          </div>
-          <textarea
-            ref={inputRef}
-            className="input assistant__input"
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); submit(); }
-            }}
-            placeholder={`Ask ${config.agentLabel}…`}
-            rows={3}
-            maxLength={config.limits.maxMessageChars}
-            aria-label="Message the assistant"
-            data-testid="assistant-input"
-          />
-          <div className="assistant__row">
-            {config.models.length > 1 ? (
-              <select className="fmt__select" value={model} onChange={(e) => setModel(e.target.value)} aria-label="Model" data-testid="assistant-model">
-                {config.models.map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
-              </select>
-            ) : (
-              <span className="assistant__hint">{config.models[0]?.label}</span>
-            )}
-            <span className="toolbar__spacer" />
-            {a.running ? (
-              <button type="button" className="btn btn--small" onClick={a.cancel} data-testid="assistant-stop">Stop</button>
-            ) : (
-              <button type="submit" className="btn btn--primary btn--small" disabled={!text.trim()} data-testid="assistant-send">Send</button>
-            )}
-          </div>
-        </form>
+        <Composer
+          config={config}
+          ctx={ctx}
+          files={getFiles()}
+          running={a.running}
+          model={model}
+          setModel={setModel}
+          onSend={send}
+          onStop={a.cancel}
+          onError={a.showError}
+          prefill={prefill}
+        />
       )}
     </aside>
   );

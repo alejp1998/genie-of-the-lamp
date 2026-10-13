@@ -37,6 +37,8 @@ import { shortcut } from '../platform';
 import ProjectSettings from '../components/ProjectSettings';
 import { ENGINES } from '../util/engines';
 import { agentDisplayName, isAgentAuthor } from '../util/agentAuthor';
+import FilePreview, { PREVIEWABLE } from '../components/FilePreview';
+import { useVirtualDocs, VirtualDocView, VirtualTabs } from '../components/VirtualDocs';
 import { AssistantDock, AssistantToggle, useAssistantDock } from '../assistant/Dock';
 import type { EditorContext } from '../assistant/api';
 
@@ -77,6 +79,7 @@ export default function Editor() {
   const [pdfWidth, setPdfWidth] = useState(() => Math.max(360, Math.round(window.innerWidth * 0.4)));
   const [resizing, setResizing] = useState(false);
   const dock = useAssistantDock(id);
+  const vdocs = useVirtualDocs();
   // Room the assistant panel takes from the row; the preview's bounds leave it out.
   const reservedRef = useRef(0);
   reservedRef.current = dock.reserved;
@@ -602,6 +605,10 @@ export default function Editor() {
 
   const insertAtCursor = useCallback((text: string) => codeRef.current?.insertAtCursor(text), []);
   // What the assistant is told about the user's view; the gateway fetches compile state itself.
+  // Opening a project file brings it in front of any document tab.
+  const showVdoc = vdocs.show;
+  useEffect(() => { showVdoc(null); }, [activeFile, showVdoc]);
+
   const getAssistantContext = useCallback((): EditorContext => {
     const c = codeRef.current?.getCursorContext();
     const sel = c?.selection;
@@ -919,6 +926,8 @@ export default function Editor() {
     return cmds;
   }, [files, activeFile, id, branch, auto, spellcheck, doCompile, toggleAuto, jumpToPdf, setEngine, setStopOnFirstError, project?.stopOnFirstError, project?.remote, insertAtCursor, loadFiles, loadProject, toast]);
 
+  // Images and PDFs in the tree open as previews where the editor would be.
+  const previewing = !!activeFile && PREVIEWABLE.test(activeFile) && !!files.find((f) => f.path === activeFile)?.binary;
   const errors = compile.result?.errors?.filter((e) => e.type !== 'typesetting') || [];
   const errCount = errors.filter((e) => e.type === 'error').length;
   const showErrors = compile.result != null && (errors.length > 0 || !compile.result.ok);
@@ -1096,7 +1105,18 @@ export default function Editor() {
         </aside>
 
         <main className="pane pane--editor" style={{ flex: 1 }}>
-          {activeFile ? (
+          <VirtualTabs fileLabel={activeFile} docs={vdocs.docs} current={vdocs.current} onShow={vdocs.show} onClose={vdocs.close} />
+          {vdocs.current && <VirtualDocView key={vdocs.current.id} doc={vdocs.current} />}
+          {/* Hidden, not unmounted, behind a document tab: the file keeps its collab connection and cursor. */}
+          <div className="editor-body" hidden={!!vdocs.current}>
+          {activeFile && previewing ? (
+            <>
+              <div className="pane__header">
+                <span className="statusbar__file" data-testid="active-file">{activeFile}</span>
+              </div>
+              <FilePreview projectId={id} branch={branch} path={activeFile} />
+            </>
+          ) : activeFile ? (
             <>
               <div className="pane__header">
                 <span className="statusbar__file" data-testid="active-file">{activeFile}</span>
@@ -1153,6 +1173,7 @@ export default function Editor() {
           ) : (
             <div className="pdf-empty"><p>Select a file to start writing.</p></div>
           )}
+          </div>
           {showErrors && (
             <div className="errors" data-testid="errors-panel">
               <div className="errors__head">
@@ -1316,7 +1337,7 @@ export default function Editor() {
             onInverse={onPdfInverse}
           />
         </section>
-        <AssistantDock dock={dock} projectId={id} getContext={getAssistantContext} onResizing={setResizing} onShowHistory={() => { setTab('history'); setSidebarHidden(false); bumpHistory(); }} />
+        <AssistantDock dock={dock} projectId={id} getContext={getAssistantContext} onResizing={setResizing} onShowHistory={() => { setTab('history'); setSidebarHidden(false); bumpHistory(); }} getFiles={() => files.filter((f) => f.type === 'file' && !f.binary).map((f) => f.path)} />
       </div>
 
       <CommandPalette open={paletteOpen} commands={commands} onClose={() => setPaletteOpen(false)} />

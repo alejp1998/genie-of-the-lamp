@@ -1,7 +1,31 @@
-import type { ChatMessage, RunEvent } from './api';
+import { type ChatMessage, gateway, type RunEvent } from './api';
+
+/** The file or pasted text inside its <referenced_file>/<pasted_text> wrapper. */
+const unwrap = (s: string) => s.replace(/^<(referenced_file|pasted_text)[^>]*>\n?/, '').replace(/\n?<\/(referenced_file|pasted_text)>$/, '');
+
+function attachmentsOf(m: ChatMessage): ItemAttachment[] {
+  const out: ItemAttachment[] = [];
+  for (const b of m.blocks) {
+    if (b.type === 'text' && b.meta === 'attachment' && b.attachment) out.push({ kind: b.attachment.kind, name: b.attachment.name, path: b.attachment.path, text: unwrap(b.text) });
+    else if (b.type === 'image') out.push({ kind: 'image', name: b.name || 'image', src: gateway.imageUrl(b.ref) });
+  }
+  return out;
+}
+
+const contextOf = (m: ChatMessage) => m.blocks.filter((b): b is { type: 'text'; text: string; meta: 'context' } => b.type === 'text' && b.meta === 'context').map((b) => b.text).join('\n\n');
+
+export interface ItemAttachment {
+  kind: 'file' | 'text' | 'image';
+  name: string;
+  /** Text as the model received it (file snapshot or pasted text). */
+  text?: string;
+  /** Image URL. */
+  src?: string;
+  path?: string;
+}
 
 export type Item =
-  | { kind: 'user'; key: string; text: string }
+  | { kind: 'user'; key: string; text: string; attachments?: ItemAttachment[]; context?: string }
   | { kind: 'assistant'; key: string; text: string }
   | { kind: 'tool'; key: string; id: string; name: string; activity: string; summary?: string; ok?: boolean; running: boolean; input?: unknown; output?: string }
   | { kind: 'notice'; key: string; level: 'warn' | 'error'; message: string };
@@ -50,7 +74,8 @@ export function buildTranscript(messages: ChatMessage[], activity: RunEvent[], s
         if (t) { t.output = b.content; t.ok = t.ok ?? !b.isError; t.running = false; }
       }
       const text = userText(m);
-      if (text) items.push({ kind: 'user', key: `m${m.id}`, text });
+      const attachments = attachmentsOf(m);
+      if (text || attachments.length) items.push({ kind: 'user', key: `m${m.id}`, text, ...(attachments.length ? { attachments } : {}), context: contextOf(m) || undefined });
       continue;
     }
     m.blocks.forEach((b, i) => {
@@ -75,6 +100,8 @@ export function buildTranscript(messages: ChatMessage[], activity: RunEvent[], s
 export interface LiveState {
   runId: string;
   userText: string;
+  /** What the composer attached, shown with the pending message until the stored copy loads. */
+  userAttachments?: ItemAttachment[];
   items: Item[];
   status: string | null;
   done: boolean;

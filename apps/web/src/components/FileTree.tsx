@@ -1,4 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type JSX } from 'react';
+import { PREVIEWABLE } from './FilePreview';
 import { ApiError, TreeEntry, api } from '../api';
 import { fileIcon } from './Icons';
 import { useDialogs } from './Dialogs';
@@ -179,7 +180,7 @@ export default function FileTree({ files, active, rootFile, projectId, branch, o
         className={`tree__item ${active === node.path ? 'tree__item--active' : ''}`}
         style={{ paddingLeft: pad }}
         data-testid={`file-${node.path}`}
-        onClick={() => !node.binary && onOpen(node.path)}
+        onClick={() => (!node.binary || PREVIEWABLE.test(node.path)) && onOpen(node.path)}
         onContextMenu={(e) => { e.preventDefault(); setMenu({ path: node.path, x: e.clientX, y: e.clientY }); }}
         title={node.path}
       >

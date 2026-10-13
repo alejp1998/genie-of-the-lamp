@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react';
 import { IconSpark } from '../components/Icons';
 import { type EditorContext, gateway, type GatewayConfig } from './api';
+import { PROMPT_EVENT, type AssistantPrompt } from './selectionActions';
+import type { Prefill } from './Composer';
 import AssistantPanel from './AssistantPanel';
 
 const MIN_W = 300;
@@ -39,8 +41,10 @@ export function useAssistantDock(projectId: string): Dock {
       if (cancelled || !c) return;
       setConfig(c);
       setOpenState(read(openKey(c.user.id, projectId)) === '1');
+      // The editor's selection actions show only where an assistant answers.
+      document.documentElement.dataset.assistant = '1';
     });
-    return () => { cancelled = true; };
+    return () => { cancelled = true; delete document.documentElement.dataset.assistant; };
   }, [projectId]);
 
   useEffect(() => {
@@ -85,10 +89,22 @@ interface DockProps {
   /** Lets the workspace switch off pointer events on the panes while dragging, as for the PDF divider. */
   onResizing(v: boolean): void;
   onShowHistory?(): void;
+  getFiles(): string[];
 }
 
-export function AssistantDock({ dock, projectId, getContext, onResizing, onShowHistory }: DockProps) {
+export function AssistantDock({ dock, projectId, getContext, onResizing, onShowHistory, getFiles }: DockProps) {
   const [dragging, setDragging] = useState(false);
+  const [prefill, setPrefill] = useState<Prefill | null>(null);
+  const { setOpen } = dock;
+  useEffect(() => {
+    const onPrompt = (e: Event) => {
+      const p = (e as CustomEvent<AssistantPrompt>).detail;
+      setOpen(true);
+      setPrefill((cur) => ({ text: p.text, withSelection: p.withSelection, selection: p.selection, seq: (cur?.seq ?? 0) + 1 }));
+    };
+    window.addEventListener(PROMPT_EVENT, onPrompt);
+    return () => window.removeEventListener(PROMPT_EVENT, onPrompt);
+  }, [setOpen]);
   if (!dock.config || !dock.open) return null;
   return (
     <>
@@ -130,7 +146,7 @@ export function AssistantDock({ dock, projectId, getContext, onResizing, onShowH
         }}
       />
       <div style={{ width: dock.width, flex: 'none', display: 'flex', minHeight: 0 }} className="assistant-dock">
-        <AssistantPanel projectId={projectId} config={dock.config} getContext={getContext} onClose={() => dock.setOpen(false)} onShowHistory={onShowHistory} />
+        <AssistantPanel projectId={projectId} config={dock.config} getContext={getContext} onClose={() => dock.setOpen(false)} onShowHistory={onShowHistory} getFiles={getFiles} prefill={prefill} />
       </div>
     </>
   );
