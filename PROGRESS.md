@@ -40,9 +40,8 @@ Running dev log for the MVP in `ALDINE_AGENT_FORK_SPEC.md` (task brief:
 - 2026-10-13 — Anthropic key added to `agent-gateway/.env` (git-ignored, mode 600). Default model
   **`claude-haiku-5-5`**; verified streaming + native tool use (`stop_reason: tool_use`).
 
-- 2026-10-13 — Fork published as **Genie** (`origin` = `alejp1998/genie-of-the-lamp`, `upstream` = `trahloff/Aldine`).
-  New README (Lyrebird-style header), pixel-art genie icon + wordmark in `docs/images/`,
-  generator `scripts/branding/make_logo.py`.
+- 2026-10-13 — Fork published (`upstream` = `trahloff/Aldine`), with a new Lyrebird-style README header.
+- 2026-10-13 — Renamed to **Genie of the Lamp**: `origin` is now `alejp1998/genie-of-the-lamp` (the old `alejp1998/Aladine` repo is abandoned). New pixel-art genie icon (supplied by the user) and a `GENIE OF THE LAMP` wordmark from `scripts/branding/make_wordmark.py`, both in `docs/images/`.
 
 - 2026-10-13 — **Plan revised (v2)** after a critical review, in `agent-gateway/DESIGN.md` §2. The main changes:
   - runs are jobs, streamed over SSE that can resume after a reconnect;
