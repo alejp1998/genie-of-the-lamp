@@ -101,6 +101,29 @@ export async function openAlexByDoi(cfg: ResearchConfig, doi: string, signal?: A
 
 // ---------- arXiv (Atom feed) ----------
 
+// arXiv asks API clients for one request at a time, three seconds apart, and
+// answers slowly; one queue per process keeps the gateway inside that.
+const ARXIV_GAP_MS = 3000;
+const ARXIV_TIMEOUT_MS = 30_000;
+let arxivQueue: Promise<unknown> = Promise.resolve();
+let arxivLast = 0;
+function arxivGet(url: string, opts: SafeFetchOptions) {
+  const next = arxivQueue.then(async () => {
+    const wait = arxivLast + ARXIV_GAP_MS - Date.now();
+    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+    try {
+      const r = await safeFetch(url, { timeoutMs: ARXIV_TIMEOUT_MS, accept: 'application/atom+xml', ...opts });
+      if (r.status === 429 || r.status === 503) throw new FetchError('arXiv is rate-limiting requests right now');
+      if (r.status >= 400) throw new FetchError(`arXiv answered ${r.status}`);
+      return r.body.toString('utf8');
+    } finally {
+      arxivLast = Date.now();
+    }
+  });
+  arxivQueue = next.catch(() => {});
+  return next;
+}
+
 const tag = (xml: string, name: string) => {
   const m = new RegExp(`<${name}[^>]*>([\\s\\S]*?)</${name}>`).exec(xml);
   return m ? decodeEntities(m[1]).replace(/\s+/g, ' ').trim() : null;
@@ -136,14 +159,13 @@ export function parseArxivFeed(xml: string): Work[] {
 export async function searchArxiv(cfg: ResearchConfig, q: LiteratureQuery, signal?: AbortSignal): Promise<Work[]> {
   const terms = q.query.split(/\s+/).filter(Boolean).map((t) => `all:${t.replace(/[^\p{L}\p{N}-]/gu, '')}`).filter((t) => t.length > 4);
   const params = new URLSearchParams({ search_query: terms.join(' AND ') || `all:${q.query}`, max_results: String(Math.min(q.limit ?? 8, 25)), ...(q.sort === 'recent' ? { sortBy: 'submittedDate', sortOrder: 'descending' } : {}) });
-  const r = await safeFetch(`${cfg.arxivBase}/query?${params}`, { signal, accept: 'application/atom+xml', allowPrivate: cfg.allowPrivate });
-  if (r.status >= 400) throw new FetchError(`arXiv answered ${r.status}`);
-  return parseArxivFeed(r.body.toString('utf8')).filter((w) => (!q.fromYear || (w.year ?? 0) >= q.fromYear) && (!q.toYear || (w.year ?? 9999) <= q.toYear));
+  const xml = await arxivGet(`${cfg.arxivBase}/query?${params}`, { signal, allowPrivate: cfg.allowPrivate });
+  return parseArxivFeed(xml).filter((w) => (!q.fromYear || (w.year ?? 0) >= q.fromYear) && (!q.toYear || (w.year ?? 9999) <= q.toYear));
 }
 
 export async function arxivById(cfg: ResearchConfig, id: string, signal?: AbortSignal): Promise<Work | null> {
-  const r = await safeFetch(`${cfg.arxivBase}/query?id_list=${encodeURIComponent(id.replace(/^arxiv:/i, ''))}`, { signal, allowPrivate: cfg.allowPrivate });
-  return parseArxivFeed(r.body.toString('utf8'))[0] ?? null;
+  const xml = await arxivGet(`${cfg.arxivBase}/query?id_list=${encodeURIComponent(id.replace(/^arxiv:/i, ''))}`, { signal, allowPrivate: cfg.allowPrivate });
+  return parseArxivFeed(xml)[0] ?? null;
 }
 
 // ---------- merged search ----------
