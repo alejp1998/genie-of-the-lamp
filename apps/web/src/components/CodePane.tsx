@@ -10,6 +10,7 @@ import { autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap } 
 import { latex } from 'codemirror-lang-latex';
 import { assistantSelectionActions } from '../assistant/selectionActions';
 import { rememberEditorCopy } from '../assistant/editorClipboard';
+import { latexToPlain } from './pdfFind';
 import * as Y from 'yjs';
 import { yCollab, yUndoManagerKeymap } from 'y-codemirror.next';
 import { HocuspocusProvider } from '@hocuspocus/provider';
@@ -54,6 +55,8 @@ export interface CodePaneHandle {
   gotoLine(line: number, opts?: { flash?: boolean; onClamped?: (lines: number) => void }): void;
   insertAtCursor(text: string): void;
   currentLine(): number | null;
+  /** What the PDF should show for the cursor: its line, the selection or the word under the cursor as it prints, and which occurrence of it in that line. */
+  pdfTarget(): { line: number; text: string | null; occurrence: number } | null;
   getSelection(): { from: number; to: number; quote: string } | null;
   /** The selection with the rest of its first and last lines: what a comment on it is about, in context. */
   getSelectionLines(): { before: string; quote: string; after: string; fromLine: number } | null;
@@ -228,6 +231,31 @@ const CodePane = forwardRef<CodePaneHandle, Props>(function CodePane({ projectId
       if (!view) return;
       view.dispatch(view.state.replaceSelection(text));
       view.focus();
+    },
+    pdfTarget() {
+      const view = viewRef.current;
+      if (!view) return null;
+      const { state } = view;
+      const sel = state.selection.main;
+      const line = state.doc.lineAt(sel.from);
+      const countIn = (hay: string, needle: string) => {
+        if (!needle) return 0;
+        const re = new RegExp(`(?<![\\p{L}\\p{N}])${needle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?![\\p{L}\\p{N}])`, 'giu');
+        return (hay.match(re) ?? []).length;
+      };
+      let text: string | null = null;
+      let start = sel.from;
+      if (!sel.empty) {
+        text = latexToPlain(state.sliceDoc(sel.from, Math.min(sel.to, sel.from + 600))).slice(0, 300) || null;
+      } else {
+        const word = state.wordAt(sel.head);
+        if (word && state.sliceDoc(word.from - 1, word.from) !== '\\') {
+          text = state.sliceDoc(word.from, word.to);
+          start = word.from;
+        }
+      }
+      const before = latexToPlain(state.sliceDoc(line.from, start));
+      return { line: line.number, text, occurrence: text ? countIn(before, text) + 1 : 1 };
     },
     currentLine() {
       const view = viewRef.current;

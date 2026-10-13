@@ -64,3 +64,32 @@ export function findMatches(pages: PageText[], query: string, max = 1000): Match
   });
   return out;
 }
+
+/**
+ * Roughly the text LaTeX source prints, for finding it in the PDF's text
+ * layer: comments, citations, references, labels and math go (they print as
+ * numbers or symbols), formatting commands keep their argument, dashes and
+ * quotes become the glyphs pdf.js reports.
+ */
+export function latexToPlain(src: string): string {
+  let s = src.replace(/(^|[^\\])%.*$/gm, '$1');
+  s = s.replace(/\\(?:[A-Za-z]*cite[A-Za-z]*|ref|eqref|cref|Cref|autoref|pageref|label|footnote|url|href)\*?(?:\[[^\]]*\])*\{[^}]*\}/g, ' ');
+  s = s.replace(/\$\$[\s\S]*?\$\$|\$[^$]*\$|\\\([\s\S]*?\\\)/g, ' ');
+  for (let i = 0; i < 3; i++) s = s.replace(/\\[A-Za-z@]+\*?(?:\[[^\]]*\])?\{([^{}]*)\}/g, '$1');
+  s = s.replace(/\\[A-Za-z@]+\*?/g, ' ').replace(/\\(.)/g, '$1');
+  s = s.replace(/---/g, '—').replace(/--/g, '–').replace(/``/g, '“').replace(/''/g, '”').replace(/~/g, ' ');
+  return s.replace(/[{}]/g, '').replace(/\s+/g, ' ').trim();
+}
+
+export interface Region { left: number; top: number; right: number; bottom: number }
+
+/**
+ * The occurrence-th match of `query` inside `region` of one page (reading
+ * order), falling back to the first one there; null when it does not occur
+ * in the region.
+ */
+export function findInRegion(page: PageText, query: string, region: Region, occurrence = 1, pageNo = 1): Match | null {
+  const inside = findMatches([page], query).filter((m) => m.rects.some((r) => r.left + r.width >= region.left - 2 && r.left <= region.right + 2 && r.top + r.height >= region.top - 2 && r.top <= region.bottom + 2));
+  const m = inside[occurrence - 1] ?? inside[0];
+  return m ? { ...m, page: pageNo } : null;
+}

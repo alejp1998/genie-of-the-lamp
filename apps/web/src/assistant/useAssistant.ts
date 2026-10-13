@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { CHANGE_EVENT, firstChange } from './changeTarget';
 import { type AcceptParts, type AssistantSession, type Attachment, type EditorContext, gateway, type GatewayConfig, type Proposal, RUN_EVENT_TYPES, type SessionDetail } from './api';
 import { applyEvent, buildTranscript, type Item, type ItemAttachment, type LiveState } from './transcript';
 
@@ -196,8 +197,12 @@ export function useAssistant(projectId: string, config: GatewayConfig | null): A
   const accept = useCallback(async (id: string, parts: AcceptParts = {}) => {
     setError(null);
     try {
+      const acceptedAt = Date.now();
       const { proposal } = await gateway.accept(id, parts);
       upsert(proposal);
+      // Show the change in the editor and, after its typeset, in the PDF (like a double-click on it).
+      const target = proposal.status === 'applied' ? firstChange(proposal.diff) : null;
+      if (target) window.dispatchEvent(new CustomEvent(CHANGE_EVENT, { detail: { ...target, acceptedAt } }));
       if (proposal.resolves?.some((r) => r.done)) window.dispatchEvent(new Event('aldine:comments-changed'));
       // The compile after an accept runs in the background; follow it until it
       // reports, then pick up the run that continues a review, if one starts.

@@ -1,13 +1,17 @@
 import { useCallback, useEffect, useImperativeHandle, forwardRef, useRef, useState } from 'react';
 import * as pdfjs from 'pdfjs-dist';
 import { shortcut } from '../platform';
-import { findMatches, type Match, type PageText } from './pdfFind';
+import { findInRegion, findMatches, type Match, type PageText, type Region } from './pdfFind';
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
 
 export interface PdfPaneHandle {
-  /** Scroll to a page + PDF-space y and flash a highlight (forward SyncTeX). */
-  showForward(page: number, y: number, h?: number): void;
+  /**
+   * Scroll to a page + PDF-space y and flash a highlight (forward SyncTeX).
+   * With `text`, only that text is flashed: its `occurrence`-th match inside
+   * `region` (the boxes the source line typeset to); otherwise the band.
+   */
+  showForward(page: number, y: number, h?: number, target?: { region?: Region; text?: string | null; occurrence?: number }): void;
   /** Opens the find bar (Ctrl/Cmd+F while the preview has focus does the same). */
   openFind(): void;
 }
@@ -31,13 +35,17 @@ interface Props {
   onFirstOpen(): void;
   /** Inverse SyncTeX: user double-clicked at (page, pdfX, pdfY) in PDF points. */
   onInverse?(page: number, x: number, y: number): void;
+  /** A PDF finished rendering (a new typeset is on screen). */
+  onRendered?(): void;
 }
 
-const PdfPane = forwardRef<PdfPaneHandle, Props>(function PdfPane({ pdfUrl, branch, status, zoom = 1, hasErrors = false, stale = false, ready = true, hasTex = true, onFirstOpen, onInverse }, ref) {
+const PdfPane = forwardRef<PdfPaneHandle, Props>(function PdfPane({ pdfUrl, branch, status, zoom = 1, hasErrors = false, stale = false, ready = true, hasTex = true, onFirstOpen, onInverse, onRendered }, ref) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const innerRef = useRef<HTMLDivElement>(null);
   const [rendered, setRendered] = useState(false);
   const renderTask = useRef(0);
+  const onRenderedRef = useRef(onRendered);
+  onRenderedRef.current = onRendered;
   const firstOpenFired = useRef(false);
   // per-page viewport info for coordinate mapping
   const pageInfo = useRef<Array<{ el: HTMLCanvasElement; scale: number; height: number }>>([]);
@@ -125,24 +133,44 @@ const PdfPane = forwardRef<PdfPaneHandle, Props>(function PdfPane({ pdfUrl, bran
   }, []);
 
   useImperativeHandle(ref, () => ({
-    showForward(page, y, h = 12) {
+    showForward(page, y, h = 12, target) {
       const info = pageInfo.current[page - 1];
       const scroller = scrollRef.current;
       if (!info || !scroller) return;
-      const top = info.el.offsetTop + y * info.scale;
-      scroller.scrollTo({ top: top - scroller.clientHeight / 3, behavior: 'smooth' });
-      // flash a highlight overlay
-      const flash = document.createElement('div');
-      flash.className = 'pdf-flash';
-      flash.style.left = `${info.el.offsetLeft}px`;
-      flash.style.top = `${info.el.offsetTop + (y - h) * info.scale}px`;
-      flash.style.width = `${info.el.clientWidth}px`;
-      flash.style.height = `${Math.max(16, h * 2 * info.scale)}px`;
-      innerRef.current?.appendChild(flash);
-      setTimeout(() => flash.remove(), 1100);
+      const flashAt = (rects: { left: number; top: number; width: number; height: number }[]) => {
+        for (const r of rects) {
+          const el = document.createElement('div');
+          el.className = 'pdf-flash';
+          el.style.left = `${info.el.offsetLeft + r.left * info.scale - 2}px`;
+          el.style.top = `${info.el.offsetTop + r.top * info.scale - 1}px`;
+          el.style.width = `${r.width * info.scale + 4}px`;
+          el.style.height = `${r.height * info.scale + 2}px`;
+          innerRef.current?.appendChild(el);
+          setTimeout(() => el.remove(), 1100);
+        }
+      };
+      const band = () => {
+        scroller.scrollTo({ top: info.el.offsetTop + y * info.scale - scroller.clientHeight / 3, behavior: 'smooth' });
+        const r = target?.region;
+        flashAt([r
+          ? { left: r.left, top: r.top, width: r.right - r.left, height: Math.max(r.bottom - r.top, 8) }
+          : { left: 0, top: y - h, width: info.el.clientWidth / info.scale, height: Math.max(16 / info.scale, h * 2) }]);
+      };
+      if (!target?.text || !target.region) { band(); return; }
+      const { text, region, occurrence } = target;
+      pageTexts().then((pages) => {
+        const words = text.split(' ').filter(Boolean);
+        const longest = [...words].sort((a, b) => b.length - a.length)[0] ?? '';
+        const tries = [...new Set([text, words.slice(0, 6).join(' '), words.slice(0, 3).join(' '), longest.length >= 4 ? longest : ''])].filter(Boolean);
+        let m: Match | null = null;
+        for (const t of tries) if (pages[page - 1] && (m = findInRegion(pages[page - 1], t, region, t === text ? occurrence ?? 1 : 1, page))) break;
+        if (!m) { band(); return; }
+        scroller.scrollTo({ top: info.el.offsetTop + m.rects[0].top * info.scale - scroller.clientHeight / 3, behavior: 'smooth' });
+        flashAt(m.rects);
+      }, band);
     },
     openFind,
-  }), [openFind]);
+  }), [openFind, pageTexts]);
 
   // auto-typeset once when the pane first mounts with no pdf
   useEffect(() => {
@@ -269,6 +297,7 @@ const PdfPane = forwardRef<PdfPaneHandle, Props>(function PdfPane({ pdfUrl, bran
         await chain;
         if (my !== renderTask.current) return;
         setRendered(true);
+        onRenderedRef.current?.();
 
         observer = new IntersectionObserver((entries) => {
           for (const entry of entries) {

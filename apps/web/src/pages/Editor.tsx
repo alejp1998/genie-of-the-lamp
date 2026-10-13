@@ -40,6 +40,7 @@ import { ENGINES } from '../util/engines';
 import { agentDisplayName, isAgentAuthor } from '../util/agentAuthor';
 import FilePreview, { PREVIEWABLE } from '../components/FilePreview';
 import { useVirtualDocs, VirtualDocView, VirtualTabs } from '../components/VirtualDocs';
+import { CHANGE_EVENT } from '../assistant/changeTarget';
 import { AssistantDock, AssistantToggle, EdgeResizer, SIDEBAR_DEFAULTS, SidebarAssistant, useAssistantDock } from '../assistant/Dock';
 import type { EditorContext } from '../assistant/api';
 import { COMMENT_EVENT } from '../assistant/selectionActions';
@@ -824,20 +825,71 @@ export default function Editor() {
     }
   }, [id, branch, files, toast]);
 
-  // Forward SyncTeX: from the editor, jump the PDF to the current line.
+  // Forward SyncTeX: show a source line in the PDF, flashing just `text`
+  // (the word or selection) inside the boxes that line typeset to.
+  const showInPdf = useCallback(async (file: string, line: number, text: string | null, occurrence = 1, quiet = false) => {
+    try {
+      const res = await api.synctex(id, branch, { direction: 'forward', file, line, column: 0 });
+      const recs = (res.records ?? []).filter((r) => r.page != null && (r.y != null || r.v != null));
+      if (!recs.length) { if (!quiet) toast('No PDF location for this line — typeset first', 'error'); return; }
+      const page = Number(recs[0].page);
+      const on = recs.filter((r) => Number(r.page) === page);
+      const num = (v: unknown, d = 0) => (v == null || Number.isNaN(Number(v)) ? d : Number(v));
+      const region = {
+        left: Math.min(...on.map((r) => num(r.x))),
+        right: Math.max(...on.map((r) => num(r.x) + num(r.w ?? r.W))),
+        top: Math.min(...on.map((r) => num(r.y ?? r.v) - num(r.h ?? r.H, 10))),
+        bottom: Math.max(...on.map((r) => Math.max(num(r.y ?? r.v), num(r.v ?? r.y)) + 2)),
+      };
+      pdfRef.current?.showForward(page, num(recs[0].y ?? recs[0].v), num(recs[0].h ?? recs[0].H, 12), { region, text, occurrence });
+    } catch {
+      if (!quiet) toast('Jump unavailable for this file', 'error');
+    }
+  }, [id, branch, toast]);
+
+  // From the editor (double-click, Cmd+J, Jump to PDF): the cursor's word or the selection.
   const jumpToPdf = useCallback(async () => {
     if (!activeFile) return;
-    const line = codeRef.current?.currentLine();
-    if (line == null) return;
-    try {
-      const res = await api.synctex(id, branch, { direction: 'forward', file: activeFile, line, column: 0 });
-      const rec = res.records?.find((r) => r.page != null && (r.y != null || r.v != null));
-      if (!rec) { toast('No PDF location for this line — typeset first', 'error'); return; }
-      pdfRef.current?.showForward(Number(rec.page), Number(rec.y ?? rec.v));
-    } catch {
-      toast('Jump unavailable for this file', 'error');
-    }
-  }, [id, branch, activeFile, toast]);
+    const t = codeRef.current?.pdfTarget();
+    if (!t) return;
+    await showInPdf(activeFile, t.line, t.text, t.occurrence);
+  }, [activeFile, showInPdf]);
+
+  // An accepted assistant change: open its file at the changed line and, once
+  // the typeset that includes it is on screen, show the new text in the PDF.
+  const pendingChange = useRef<{ path: string; line: number; text: string | null; at: number } | null>(null);
+  const lastRenderAt = useRef(0);
+  useEffect(() => {
+    const onChange = (e: Event) => {
+      const c = (e as CustomEvent<{ path: string; line: number; text: string | null; acceptedAt: number }>).detail;
+      if (!files.some((f) => f.type === 'file' && f.path === c.path)) return;
+      if (c.path !== activeFile) setActiveFile(c.path);
+      setSidebarHidden((h) => (window.matchMedia('(max-width: 640px)').matches ? true : h));
+      const jump = (tries: number) => {
+        const code = codeRef.current;
+        if (code) code.gotoLine(c.line, { flash: true });
+        else if (tries < 40) setTimeout(() => jump(tries + 1), 50);
+      };
+      requestAnimationFrame(() => jump(0));
+      // The typeset after the accept may already be on screen; otherwise wait for it.
+      if (lastRenderAt.current > c.acceptedAt) void showInPdf(c.path, c.line, c.text, 1, true);
+      else {
+        const pending = { path: c.path, line: c.line, text: c.text, at: Date.now() };
+        pendingChange.current = pending;
+        // No new PDF yet (auto-typeset off, or the run was missed): typeset it ourselves.
+        setTimeout(() => { if (pendingChange.current === pending) void doCompile(); }, 20_000);
+      }
+    };
+    window.addEventListener(CHANGE_EVENT, onChange);
+    return () => window.removeEventListener(CHANGE_EVENT, onChange);
+  }, [files, activeFile, showInPdf, doCompile]);
+  const onPdfRendered = useCallback(() => {
+    lastRenderAt.current = Date.now();
+    const c = pendingChange.current;
+    if (!c) return;
+    pendingChange.current = null;
+    if (Date.now() - c.at < 60_000) void showInPdf(c.path, c.line, c.text, 1, true);
+  }, [showInPdf]);
 
   // Cmd+S → typeset, Cmd+K → command palette, Cmd+J → jump the PDF to the cursor
   useEffect(() => {
@@ -1425,6 +1477,7 @@ export default function Editor() {
           </div>
           <PdfPane
             ref={pdfRef}
+            onRendered={onPdfRendered}
             pdfUrl={compile.result?.pdfUrl || null}
             branch={branch}
             status={compile.status}
