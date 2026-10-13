@@ -143,6 +143,13 @@ Running dev log for the MVP in `ALDINE_AGENT_FORK_SPEC.md` (task brief:
   - the header Comment button is gone in this mode, since the selection toolbar has Comment;
   - assistant e2e 11/11; upstream specs for plugins, Zotero, review and settings 41/41; the earlier 09/16/17/18/20/21 failures were a stale e2e server: 44/44 on a clean run.
 
+- 2026-10-13 — **Assistant layouts:**
+  - default: in the sidebar below the tabs, taking 75 % of the height with a draggable divider; the sidebar is resizable (default 340 px), the tab row stays on one line, and the tree flows into columns when the sidebar is wide;
+  - alternatives: a sidebar tab (open exactly while its tab is active) or the right pane;
+  - switched from a three-icon control in the panel header or from Settings → Layout; saved per browser;
+  - the file tree's drop box and hint are removed: drops work anywhere on the panel, with a faint tint;
+  - assistant e2e 12/12; upstream file-tree/upload/sidebar specs 43/43.
+
 ### In progress
 - Nothing.
 

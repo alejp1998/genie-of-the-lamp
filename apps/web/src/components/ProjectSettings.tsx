@@ -3,6 +3,7 @@ import { api, CompilerInfo, ProjectSummary, TreeEntry } from '../api';
 import Modal from './Modal';
 import { ENGINES, texliveLabel } from '../util/engines';
 import { getTheme, setTheme, Theme } from '../theme';
+import { PLACEMENTS, type Placement } from '../assistant/placement';
 
 interface Props {
   project: Pick<ProjectSummary, 'id' | 'name' | 'rootFile' | 'engine' | 'stopOnFirstError'>;
@@ -22,6 +23,9 @@ interface Props {
   /** Optional sidebar tabs (plugin panels) and whether this browser shows them. */
   tabs?: { id: string; title: string; shown: boolean }[];
   onToggleTab?(id: string): void;
+  /** Where the assistant panel lives; absent without an assistant. */
+  assistantPlacement?: Placement;
+  onSetAssistantPlacement?(p: Placement): void;
 }
 
 /**
@@ -29,7 +33,7 @@ interface Props {
  * engine picker and the log dialog's stop-on-error box are shortcuts to the
  * same state). Every change saves on its own; there is no Save button.
  */
-export default function ProjectSettings({ project, branch, files, autoTypeset, importNote, onClose, onRename, onSetRoot, onSetEngine, onSetStopOnFirstError, onToggleAutoTypeset, tabs, onToggleTab }: Props) {
+export default function ProjectSettings({ project, branch, files, autoTypeset, importNote, onClose, onRename, onSetRoot, onSetEngine, onSetStopOnFirstError, onToggleAutoTypeset, tabs, onToggleTab, assistantPlacement, onSetAssistantPlacement }: Props) {
   const [name, setName] = useState(project.name);
   const [theme, setThemeChoice] = useState<Theme>(getTheme());
   const [compiler, setCompiler] = useState<CompilerInfo | null>(null);
@@ -166,6 +170,27 @@ export default function ProjectSettings({ project, branch, files, autoTypeset, i
             </span>
           </div>
         </section>
+
+        {assistantPlacement && onSetAssistantPlacement && (
+          <section data-testid="layout-settings">
+            <div className="menu__label" style={{ margin: '18px 0 4px', padding: 0 }}>Layout</div>
+            <div className="settings__row">
+              <label className="settings__label" htmlFor="settings-assistant-placement">Assistant</label>
+              <span className="settings__control settings__control--check">
+                <select
+                  id="settings-assistant-placement"
+                  className="input"
+                  value={assistantPlacement}
+                  onChange={(e) => onSetAssistantPlacement(e.target.value as Placement)}
+                  data-testid="settings-assistant-placement"
+                >
+                  {PLACEMENTS.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
+                </select>
+                <span className="settings__hint">In the sidebar, the editor and the PDF keep the width; applies to this browser</span>
+              </span>
+            </div>
+          </section>
+        )}
 
         {tabs && tabs.length > 0 && onToggleTab && (
           <section data-testid="sidebar-tab-settings">

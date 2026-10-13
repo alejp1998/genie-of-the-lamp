@@ -8,6 +8,7 @@ import Composer, { Chips, type ComposerHandle, type Pending, type Prefill } from
 import Markdown from './Markdown';
 import ProposalCard from './ProposalCard';
 import Sources from './Sources';
+import { PLACEMENTS, type Placement } from './placement';
 import type { Item } from './transcript';
 import { type AssistantState, useAssistant } from './useAssistant';
 import './assistant.css';
@@ -23,6 +24,9 @@ interface Props {
   getFiles(): string[];
   /** A prompt sent from an editor selection action. */
   prefill: Prefill | null;
+  /** Where the panel lives, and how to move it. */
+  placement?: Placement;
+  onPlace?(p: Placement): void;
 }
 
 const SUGGESTIONS = [
@@ -142,7 +146,38 @@ function Transcript({ items, cards }: { items: Item[]; cards: CardHooks }) {
   );
 }
 
-export default function AssistantPanel({ projectId, config, getContext, onClose, onShowHistory, getFiles, prefill }: Props) {
+/** Region of a little window the panel occupies, per placement. */
+const LAYOUT_ICON: Record<Placement, string> = {
+  below: 'M2 7.5h4.5v4H2z',
+  tab: 'M2 2.5h4.5v9H2z',
+  right: 'M10.5 2.5H14v9h-3.5z',
+};
+
+function LayoutSwitch({ placement, onPlace }: { placement: Placement; onPlace(p: Placement): void }) {
+  return (
+    <span className="assistant__layout" role="radiogroup" aria-label="Where the assistant sits">
+      {PLACEMENTS.map((p) => (
+        <button
+          key={p.id}
+          role="radio"
+          aria-checked={placement === p.id}
+          className={`assistant__layout-btn${placement === p.id ? ' assistant__layout-btn--on' : ''}`}
+          onClick={() => onPlace(p.id)}
+          title={p.label}
+          aria-label={p.label}
+          data-testid={`assistant-place-${p.id}`}
+        >
+          <svg width="16" height="14" viewBox="0 0 16 14" aria-hidden="true">
+            <rect x="1" y="1.5" width="14" height="11" rx="1.5" fill="none" stroke="currentColor" strokeWidth="1.2" />
+            <path d={LAYOUT_ICON[p.id]} fill="currentColor" />
+          </svg>
+        </button>
+      ))}
+    </span>
+  );
+}
+
+export default function AssistantPanel({ projectId, config, getContext, onClose, onShowHistory, getFiles, prefill, placement, onPlace }: Props) {
   const a = useAssistant(projectId, config);
   const dialogs = useDialogs();
   const [model, setModel] = useState(config.defaultModel);
@@ -226,6 +261,7 @@ export default function AssistantPanel({ projectId, config, getContext, onClose,
         </button>
         <span className="toolbar__spacer" />
         <button className="btn btn--ghost btn--small" onClick={() => { a.select(null); setMenu(null); }} data-testid="assistant-new-chat" title="Start a new chat">New chat</button>
+        {onPlace && placement && <LayoutSwitch placement={placement} onPlace={onPlace} />}
         {session?.isOwner && (
           <button className="btn btn--ghost btn--small" onClick={() => setMenu(menu === 'actions' ? null : 'actions')} aria-haspopup="menu" aria-expanded={menu === 'actions'} aria-label="Chat options" data-testid="assistant-actions">⋯</button>
         )}
@@ -250,8 +286,9 @@ export default function AssistantPanel({ projectId, config, getContext, onClose,
             ))}
           </div>
         )}
-        {menu === 'actions' && session && (
+        {menu === 'actions' && session?.isOwner && (
           <div ref={leave} className="menu assistant__menu assistant__menu--right" role="menu">
+            {session?.isOwner && <>
             <button role="menuitem" className="menu__item" data-testid="assistant-share-toggle" onClick={() => { setMenu(null); a.setVisibility(session.visibility === 'project' ? 'private' : 'project'); }}>
               {session.visibility === 'project' ? 'Make private' : 'Share with project collaborators'}
             </button>
@@ -265,6 +302,7 @@ export default function AssistantPanel({ projectId, config, getContext, onClose,
               setMenu(null);
               if (await dialogs.confirm({ title: `Delete “${session.title}”?`, body: 'The chat is removed for everyone it was shared with. Changes already committed stay in the project history.', confirmLabel: 'Delete chat', danger: true })) a.remove();
             }}>Delete chat…</button>
+            </>}
           </div>
         )}
       </div>

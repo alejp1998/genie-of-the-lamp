@@ -347,3 +347,52 @@ test('with the assistant, Cite and Zotero start hidden and the sidebar gear brin
   await expect(page.getByTestId('tab-plugin:references')).toBeVisible();
   await expect(page.getByTestId('tab-plugin:zotero')).toHaveCount(0);
 });
+
+test('the assistant sits below the sidebar tabs by default, and can be a sidebar tab or a pane right of the preview', async ({ page }) => {
+  await signUp(page.request, 'Ada');
+  const id = await newProject(page.request);
+  await openAssistant(page, id);
+  const sidebar = page.getByTestId('sidebar');
+  // Default: below the tabs, files and assistant together; the assistant takes about three quarters.
+  await expect(sidebar.getByTestId('assistant-panel')).toBeVisible();
+  await expect(page.getByTestId('file-tree')).toBeVisible();
+  await expect(page.getByTestId('tab-assistant')).toHaveCount(0);
+  await expect(page.getByText('Drop files here to upload')).toHaveCount(0);
+  const share = async () => {
+    const [p, a] = await Promise.all([sidebar.getByTestId('assistant-panel').boundingBox(), sidebar.boundingBox()]);
+    return p!.height / a!.height;
+  };
+  expect(await share()).toBeGreaterThan(0.65);
+  // The divider drags.
+  const bar = page.getByTestId('assistant-below-resizer');
+  const box = (await bar.boundingBox())!;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2, box.y + 200, { steps: 5 });
+  await page.mouse.up();
+  expect(await share()).toBeLessThan(0.65);
+  // As a sidebar tab: open exactly while its tab is active.
+  await page.getByTestId('assistant-place-tab').click();
+  await expect(page.getByTestId('tab-assistant')).toHaveClass(/sidebar__tab--active/);
+  await page.getByTestId('tab-files').click();
+  await expect(page.getByTestId('assistant-panel')).toBeHidden();
+  await expect(page.getByTestId('assistant-toggle')).toHaveAttribute('aria-pressed', 'false');
+  await page.getByTestId('tab-assistant').click();
+  await expect(sidebar.getByTestId('assistant-panel')).toBeVisible();
+  // From the header switch straight to the right pane and back to below.
+  await page.getByTestId('assistant-place-right').click();
+  await expect(page.locator('.assistant-dock').getByTestId('assistant-panel')).toBeVisible();
+  await page.locator('.assistant-dock').getByTestId('assistant-place-below').click();
+  await expect(sidebar.getByTestId('assistant-panel')).toBeVisible();
+  await expect(page.getByTestId('file-tree')).toBeVisible();
+  // Right of the preview, from the settings.
+  await page.getByTestId('sidebar-settings').click();
+  await page.getByTestId('settings-assistant-placement').selectOption('right');
+  await page.getByTestId('settings-close').click();
+  await expect(page.locator('.assistant-dock').getByTestId('assistant-panel')).toBeVisible();
+  await expect(sidebar.getByTestId('assistant-panel')).toHaveCount(0);
+  await expect(page.getByTestId('sidebar-resizer')).toHaveCount(0);
+  // Remembered per browser.
+  await page.reload();
+  await expect(page.locator('.assistant-dock').getByTestId('assistant-panel')).toBeVisible();
+});

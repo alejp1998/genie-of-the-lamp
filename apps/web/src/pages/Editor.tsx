@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { api, ApiError, CompileResult, ImportedProject, ProjectDetail, TreeEntry, Comment, localUser, accountIdentity } from '../api';
 import { normalizeDeepLinkPath, resolveDeepLinkFile } from '../util/deepLink';
@@ -16,7 +16,7 @@ import ReviewPanel from '../components/ReviewPanel';
 import Presence, { PresenceUser } from '../components/Presence';
 import { PluginHost, PluginPanel } from '../plugins/host';
 import { hintFor } from '../editor/errorHints';
-import { IconChevronLeft, IconGear } from '../components/Icons';
+import { IconChevronLeft, IconGear, IconSpark } from '../components/Icons';
 import CommandPalette, { Command } from '../components/CommandPalette';
 import { invalidateBibCache, invalidateLabelCache } from '../editor/latexExtras';
 import { useCommentSignal } from '../editor/commentSignal';
@@ -40,7 +40,7 @@ import { ENGINES } from '../util/engines';
 import { agentDisplayName, isAgentAuthor } from '../util/agentAuthor';
 import FilePreview, { PREVIEWABLE } from '../components/FilePreview';
 import { useVirtualDocs, VirtualDocView, VirtualTabs } from '../components/VirtualDocs';
-import { AssistantDock, AssistantToggle, useAssistantDock } from '../assistant/Dock';
+import { AssistantDock, AssistantToggle, EdgeResizer, SIDEBAR_DEFAULTS, SidebarAssistant, useAssistantDock } from '../assistant/Dock';
 import type { EditorContext } from '../assistant/api';
 import { COMMENT_EVENT } from '../assistant/selectionActions';
 
@@ -955,6 +955,34 @@ export default function Editor() {
     saveTabPrefs(next);
     if (!next[pid] && tab === pid) setTab('files');
   };
+
+  // As a sidebar tab, the assistant is open exactly while its tab is the
+  // active one: the header toggle and the selection actions switch to it,
+  // and choosing another tab (or closing it) puts it away.
+  const assistantTab = !!dock.config && dock.placement === 'tab';
+  const assistantBelow = !!dock.config && dock.placement === 'below';
+  const lastTab = useRef<string>('files');
+  const sidebarRef = useRef<HTMLElement>(null);
+  const [assistantMounted, setAssistantMounted] = useState(false);
+  useEffect(() => {
+    if (assistantTab && dock.open && tab !== 'assistant') { setTab('assistant'); setSidebarHidden(false); }
+    else if ((!assistantTab || !dock.open) && tab === 'assistant') setTab(lastTab.current);
+    if (assistantBelow && dock.open) setSidebarHidden(false);
+    if (dock.open && dock.placement !== 'right') setAssistantMounted(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dock.open, dock.placement, assistantTab, assistantBelow]);
+  useEffect(() => {
+    if (tab !== 'assistant') lastTab.current = tab;
+    if (assistantTab && tab !== 'assistant' && dock.open) dock.setOpen(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab]);
+  const sidebarAssistantProps = {
+    dock,
+    projectId: id,
+    getContext: getAssistantContext,
+    onShowHistory: () => { if (assistantTab) dock.setOpen(false); setTab('history'); setSidebarHidden(false); bumpHistory(); },
+    getFiles: () => files.filter((f) => f.type === 'file' && !f.binary).map((f) => f.path),
+  };
   // Images and PDFs in the tree open as previews where the editor would be.
   const previewing = !!activeFile && PREVIEWABLE.test(activeFile) && !!files.find((f) => f.path === activeFile)?.binary;
   const errors = compile.result?.errors?.filter((e) => e.type !== 'typesetting') || [];
@@ -1050,7 +1078,12 @@ export default function Editor() {
       )}
 
       <div className={`workspace${resizing ? ' workspace--resizing' : ''}`}>
-        <aside className={`pane sidebar${sidebarHidden ? ' sidebar--hidden' : ''}`} data-testid="sidebar">
+        <aside
+          ref={sidebarRef}
+          className={`pane sidebar${sidebarHidden ? ' sidebar--hidden' : ''}${dock.config && dock.placement !== 'right' ? ' sidebar--wide' : ''}${assistantBelow && dock.open ? ' sidebar--split' : ''}`}
+          style={dock.config && dock.placement !== 'right' ? ({ '--sidebar-w': `${dock.sidebarWidth}px` } as CSSProperties) : undefined}
+          data-testid="sidebar"
+        >
           <div className="sidebar__tabs" role="tablist">
             {dock.config && (
               <button className="sidebar__gear" onClick={() => setSettingsOpen(true)} title="Settings: sidebar tabs, compiler, appearance" aria-label="Settings" data-testid="sidebar-settings"><IconGear /></button>
@@ -1060,13 +1093,18 @@ export default function Editor() {
             <button className={`sidebar__tab ${tab === 'review' ? 'sidebar__tab--active' : ''}`} onClick={() => setTab('review')} role="tab" data-testid="tab-review">
               Review{comments.some((c) => !c.resolved) ? ` (${comments.filter((c) => !c.resolved).length})` : ''}
             </button>
+            {assistantTab && (
+              <button className={`sidebar__tab sidebar__tab--assistant ${tab === 'assistant' ? 'sidebar__tab--active' : ''}`} onClick={() => dock.setOpen(true)} role="tab" data-testid="tab-assistant">
+                <IconSpark /> Assistant
+              </button>
+            )}
             {shownPanels.map((p) => (
               <button key={p.id} className={`sidebar__tab ${tab === p.id ? 'sidebar__tab--active' : ''}`} onClick={() => setTab(p.id)} role="tab" data-testid={`tab-${p.id}`}>
                 {p.title}
               </button>
             ))}
           </div>
-          <div className="sidebar__body">
+          <div className="sidebar__body" hidden={tab === 'assistant'}>
             {tab === 'files' && (
               <FileTree
                 files={files}
@@ -1136,7 +1174,37 @@ export default function Editor() {
               <div key={p.id} style={{ display: tab === p.id ? 'block' : 'none' }} ref={(el) => { if (el && !el.hasChildNodes()) p.mount(el); }} />
             ))}
           </div>
+          {/* Kept mounted once opened, so switching tabs keeps the chat and any live run on screen. */}
+          {assistantTab && assistantMounted && (
+            <div className="sidebar__assistant" hidden={tab !== 'assistant'}><SidebarAssistant {...sidebarAssistantProps} /></div>
+          )}
+          {assistantBelow && dock.open && (
+            <>
+              <EdgeResizer
+                orientation="horizontal"
+                label="Resize the assistant"
+                value={dock.belowFraction * (sidebarRef.current?.clientHeight || 1)}
+                onChange={(px) => dock.setBelowFraction(px / (sidebarRef.current?.clientHeight || 1))}
+                onReset={() => dock.setBelowFraction(SIDEBAR_DEFAULTS.below)}
+                onResizing={() => {}}
+                testId="assistant-below-resizer"
+              />
+              <div className="sidebar__assistant sidebar__assistant--below" style={{ height: `${dock.belowFraction * 100}%` }}><SidebarAssistant {...sidebarAssistantProps} /></div>
+            </>
+          )}
         </aside>
+        {dock.config && dock.placement !== 'right' && !sidebarHidden && (
+          <EdgeResizer
+            orientation="vertical"
+            label="Resize the sidebar"
+            value={dock.sidebarWidth}
+            onChange={dock.setSidebarWidth}
+            onReset={() => dock.setSidebarWidth(SIDEBAR_DEFAULTS.width)}
+            onResizing={setResizing}
+            testId="sidebar-resizer"
+            className="sidebar-resizer"
+          />
+        )}
 
         <main className="pane pane--editor" style={{ flex: 1 }}>
           <VirtualTabs fileLabel={activeFile} docs={vdocs.docs} current={vdocs.current} onShow={vdocs.show} onClose={vdocs.close} />
@@ -1430,6 +1498,8 @@ export default function Editor() {
           onToggleAutoTypeset={toggleAuto}
           tabs={optionalPanels.map((p) => ({ id: p.id, title: p.title, shown: tabShown(tabPrefs, p.id, !!dock.config) }))}
           onToggleTab={toggleTab}
+          assistantPlacement={dock.config ? dock.placement : undefined}
+          onSetAssistantPlacement={dock.setPlacement}
         />
       )}
 

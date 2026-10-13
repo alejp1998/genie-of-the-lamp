@@ -623,7 +623,24 @@ body:has(.modal-backdrop) .assistant-sel { display: none; }
 .settings__tabs .settings__hint { flex-basis: 100%; }
 .sidebar__tab:active { background: var(--bg-active); }
 .sidebar__tab--active { background: var(--bg-active); color: var(--text); font-weight: 600; }
-.sidebar__body { flex: 1; overflow: auto; padding: 6px; }
+.sidebar__body { flex: 1; min-height: 0; overflow: auto; padding: 6px; }
+.sidebar__body[hidden] { display: none; }
+/* The assistant inside the sidebar ("tab" and "below" placements). */
+.sidebar--wide { width: var(--sidebar-w, 340px); }
+.sidebar__assistant { flex: 1; min-height: 0; display: flex; border-top: 1px solid var(--hairline); margin-top: 6px; }
+.sidebar__assistant[hidden] { display: none; }
+.sidebar__assistant--below { flex: none; margin-top: 0; min-height: 160px; }
+/* Split: the tabs keep the top share and scroll inside it; the tab row stays on one line. */
+.sidebar--split .sidebar__body { min-height: 60px; }
+/* A short, wide top: the tree flows into balanced columns instead of one long scroll. */
+.sidebar--split .filetree { column-width: 160px; column-gap: 14px; }
+.sidebar--split .filetree .tree__item { break-inside: avoid; }
+.sidebar--split .filetree .tree__actions { column-span: all; }
+.sidebar--wide .sidebar__tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: thin; padding-bottom: 2px; }
+.sidebar--wide .sidebar__tab { flex: 0 1 auto; padding: 0 10px; }
+.sidebar__tab--assistant { display: inline-flex; align-items: center; justify-content: center; gap: 5px; }
+.resizer--h { width: auto; height: 9px; margin: -4px 0; cursor: row-resize; position: relative; flex: none; }
+.resizer--h::after { inset: 3px 0; }
 
 /* file tree */
 .tree__item {
@@ -811,21 +828,9 @@ body:has(.modal-backdrop) .assistant-sel { display: none; }
 
 /* file tree upload */
 .filetree { position: relative; min-height: 120px; }
-.filetree--drag::after {
-  content: 'Drop to upload';
-  position: absolute;
-  inset: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border: 2px dashed var(--accent);
-  border-radius: var(--radius-m);
-  background: var(--accent-soft);
-  color: var(--accent);
-  font-weight: 600;
-  pointer-events: none;
-}
-.filetree__hint { color: var(--text-3); font-size: var(--text-xs); text-align: center; margin: 10px 0 4px; }
+/* The whole panel takes drops; a faint tint while files hover over it, no drop box. */
+.filetree { min-height: 100%; border-radius: var(--radius-s); transition: background-color 120ms; }
+.filetree--drag { background: var(--accent-soft); }
 .pdf-empty {
   position: absolute;
   inset: 0;
@@ -1200,6 +1205,8 @@ body:has(.modal-backdrop) .assistant-sel { display: none; }
   /* The overlay hides the editor; a deep link to a line collapses it and the
      toolbar button brings it back. */
   .sidebar--hidden { display: none; }
+  .sidebar--wide { width: calc(100vw - 40px); }
+  .sidebar-resizer { display: none; }
   .sidebar-toggle { display: inline-flex; }
 }
 

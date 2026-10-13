@@ -27,6 +27,12 @@ All notable changes to Aldine are documented here. The format follows
   their sources as cards. A proposal can add BibTeX entries (via
   `references_add`) together with its `\cite`. New `/factcheck`,
   `/references` and `/related` commands, and Check on a selection.
+- Assistant layout (Genie of the Lamp fork): by default the panel sits in the sidebar below
+  the tabs (three quarters of the height, draggable divider; the sidebar is
+  resizable). It can also be a sidebar tab or the old pane right of the
+  preview, switched from the panel header or the settings. The file tree
+  drops its "Drop files here" box: files dropped anywhere on the panel upload,
+  with a faint tint while they hover.
 - With the assistant deployed (Genie of the Lamp fork): Cite and Zotero start hidden. A gear at
   the left of the sidebar tabs opens the settings, where a new Sidebar tabs
   section shows or hides them for this browser. The header Comment button

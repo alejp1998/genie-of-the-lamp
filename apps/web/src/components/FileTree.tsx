@@ -217,7 +217,6 @@ export default function FileTree({ files, active, rootFile, projectId, branch, o
             onChange={async (e) => { if (e.target.files?.length) await uploadFiles(e.target.files); e.target.value = ''; }} />
         </div>
       )}
-      <p className="filetree__hint">Drop files here to upload</p>
 
       {menu && (
         <div ref={(el) => { menuRef.current = el; leave(el); }} className="menu" role="menu" style={{ left: menu.x, top: menu.y, position: 'fixed' }} onClick={(e) => e.stopPropagation()} data-testid="file-menu">
