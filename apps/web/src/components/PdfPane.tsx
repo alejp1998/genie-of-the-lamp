@@ -1,12 +1,15 @@
-import { useEffect, useImperativeHandle, forwardRef, useRef, useState } from 'react';
+import { useCallback, useEffect, useImperativeHandle, forwardRef, useRef, useState } from 'react';
 import * as pdfjs from 'pdfjs-dist';
 import { shortcut } from '../platform';
+import { findMatches, type Match, type PageText } from './pdfFind';
 
 pdfjs.GlobalWorkerOptions.workerSrc = new URL('pdfjs-dist/build/pdf.worker.min.mjs', import.meta.url).toString();
 
 export interface PdfPaneHandle {
   /** Scroll to a page + PDF-space y and flash a highlight (forward SyncTeX). */
   showForward(page: number, y: number, h?: number): void;
+  /** Opens the find bar (Ctrl/Cmd+F while the preview has focus does the same). */
+  openFind(): void;
 }
 
 interface Props {
@@ -39,6 +42,88 @@ const PdfPane = forwardRef<PdfPaneHandle, Props>(function PdfPane({ pdfUrl, bran
   // per-page viewport info for coordinate mapping
   const pageInfo = useRef<Array<{ el: HTMLCanvasElement; scale: number; height: number }>>([]);
 
+  // ---- find in PDF ----
+  const docRef = useRef<Awaited<ReturnType<typeof pdfjs.getDocument>['promise']> | null>(null);
+  const textRef = useRef<{ url: string | null; pages: Promise<PageText[]> | null }>({ url: null, pages: null });
+  const [findOpen, setFindOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  const [matches, setMatches] = useState<Match[]>([]);
+  const [current, setCurrent] = useState(0);
+  const [layoutGen, setLayoutGen] = useState(0);
+  const findInput = useRef<HTMLInputElement>(null);
+
+  const pageTexts = useCallback((): Promise<PageText[]> => {
+    const doc = docRef.current;
+    if (!doc) return Promise.resolve([]);
+    if (textRef.current.url !== pdfUrl || !textRef.current.pages) {
+      textRef.current = {
+        url: pdfUrl,
+        pages: (async () => {
+          const out: PageText[] = [];
+          for (let i = 1; i <= doc.numPages; i++) {
+            const page = await doc.getPage(i);
+            const tc = await page.getTextContent();
+            out.push({ view: page.view, items: tc.items.filter((it): it is typeof it & { str: string } => 'str' in it) as unknown as PageText['items'] });
+          }
+          return out;
+        })(),
+      };
+    }
+    return textRef.current.pages!;
+  }, [pdfUrl]);
+
+  // Re-run on a new PDF (each typeset) and when the query changes.
+  useEffect(() => {
+    if (!findOpen || !query.trim() || !rendered) { setMatches([]); return; }
+    let cancelled = false;
+    const t = setTimeout(() => {
+      pageTexts().then((pages) => {
+        if (cancelled) return;
+        const m = findMatches(pages, query);
+        setMatches(m);
+        setCurrent((c) => (c < m.length ? c : 0));
+      }).catch(() => {});
+    }, 120);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [query, findOpen, rendered, pdfUrl, pageTexts]);
+
+  // Draw hits over the canvases; redrawn after every layout (zoom, new PDF).
+  useEffect(() => {
+    const inner = innerRef.current;
+    if (!inner) return;
+    inner.querySelectorAll('.pdf-hit').forEach((el) => el.remove());
+    if (!findOpen) return;
+    matches.forEach((m, i) => {
+      const info = pageInfo.current[m.page - 1];
+      if (!info) return;
+      for (const r of m.rects) {
+        const hit = document.createElement('div');
+        hit.className = `pdf-hit${i === current ? ' pdf-hit--current' : ''}`;
+        hit.style.left = `${info.el.offsetLeft + r.left * info.scale}px`;
+        hit.style.top = `${info.el.offsetTop + r.top * info.scale}px`;
+        hit.style.width = `${r.width * info.scale}px`;
+        hit.style.height = `${r.height * info.scale}px`;
+        inner.appendChild(hit);
+      }
+    });
+  }, [matches, current, findOpen, layoutGen]);
+
+  const goTo = useCallback((i: number) => {
+    if (!matches.length) return;
+    const n = (i + matches.length) % matches.length;
+    setCurrent(n);
+    const m = matches[n];
+    const info = pageInfo.current[m.page - 1];
+    const scroller = scrollRef.current;
+    if (info && scroller) scroller.scrollTo({ top: info.el.offsetTop + m.rects[0].top * info.scale - scroller.clientHeight / 3, behavior: 'smooth' });
+  }, [matches]);
+  useEffect(() => { if (matches.length) goTo(current); }, [matches]); // first hit comes into view
+
+  const openFind = useCallback(() => {
+    setFindOpen(true);
+    requestAnimationFrame(() => { findInput.current?.focus(); findInput.current?.select(); });
+  }, []);
+
   useImperativeHandle(ref, () => ({
     showForward(page, y, h = 12) {
       const info = pageInfo.current[page - 1];
@@ -56,7 +141,8 @@ const PdfPane = forwardRef<PdfPaneHandle, Props>(function PdfPane({ pdfUrl, bran
       innerRef.current?.appendChild(flash);
       setTimeout(() => flash.remove(), 1400);
     },
-  }), []);
+    openFind,
+  }), [openFind]);
 
   // auto-typeset once when the pane first mounts with no pdf
   useEffect(() => {
@@ -150,6 +236,7 @@ const PdfPane = forwardRef<PdfPaneHandle, Props>(function PdfPane({ pdfUrl, bran
       try {
         doc = await pdfjs.getDocument(pdfUrl).promise;
         if (my !== renderTask.current) { try { doc.destroy(); } catch { /* noop */ } return; }
+        docRef.current = doc;
         const width = Math.max(320, scroller.clientWidth - 36) * layoutZoom;
         const frag = document.createDocumentFragment();
         const info: Array<{ el: HTMLCanvasElement; scale: number; height: number }> = [];
@@ -173,6 +260,7 @@ const PdfPane = forwardRef<PdfPaneHandle, Props>(function PdfPane({ pdfUrl, bran
         if (my !== renderTask.current) return;
         container.replaceChildren(frag);
         pageInfo.current = info;
+        setLayoutGen((g) => g + 1);
         scroller.scrollTop = prevScroll;
 
         // First visible page rasterizes before the spinner goes away — no
@@ -222,7 +310,36 @@ const PdfPane = forwardRef<PdfPaneHandle, Props>(function PdfPane({ pdfUrl, bran
   };
 
   return (
-    <div className="pdf-pane" ref={scrollRef} data-testid="pdf-pane">
+    <div
+      className="pdf-pane"
+      ref={scrollRef}
+      data-testid="pdf-pane"
+      tabIndex={-1}
+      onKeyDown={(e) => {
+        if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'f') { e.preventDefault(); openFind(); }
+      }}
+    >
+      {findOpen && (
+        <div className="pdf-find" role="search" data-testid="pdf-find">
+          <input
+            ref={findInput}
+            className="input pdf-find__input"
+            value={query}
+            placeholder="Find in PDF"
+            aria-label="Find in PDF"
+            data-testid="pdf-find-input"
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') { e.preventDefault(); goTo(current + (e.shiftKey ? -1 : 1)); }
+              else if (e.key === 'Escape') { e.preventDefault(); setFindOpen(false); scrollRef.current?.focus(); }
+            }}
+          />
+          <span className="pdf-find__count" data-testid="pdf-find-count">{query.trim() ? (matches.length ? `${current + 1} of ${matches.length}` : 'No results') : ''}</span>
+          <button className="btn btn--ghost btn--small" onClick={() => goTo(current - 1)} disabled={!matches.length} aria-label="Previous match" title="Previous (Shift+Enter)">↑</button>
+          <button className="btn btn--ghost btn--small" onClick={() => goTo(current + 1)} disabled={!matches.length} aria-label="Next match" title="Next (Enter)">↓</button>
+          <button className="btn btn--ghost btn--small" onClick={() => setFindOpen(false)} aria-label="Close find">×</button>
+        </div>
+      )}
       {stale && rendered && (
         <div className="pdf-stale" data-testid="pdf-stale">Preview is from the last successful typeset</div>
       )}

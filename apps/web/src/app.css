@@ -833,6 +833,29 @@
   background: var(--warn-soft);
   border-bottom: 1px solid var(--hairline);
 }
+/* find in PDF: a sticky bar over the pages, hits drawn over the canvases */
+.pdf-find {
+  position: sticky;
+  top: 8px;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  width: max-content;
+  max-width: calc(100% - 16px);
+  margin: 8px 8px -44px auto;
+  padding: 4px 4px 4px 6px;
+  background: var(--material-pop);
+  backdrop-filter: var(--material-blur);
+  -webkit-backdrop-filter: var(--material-blur);
+  border-radius: var(--radius-m);
+  box-shadow: var(--shadow-pop);
+}
+.pdf-find__input { width: 180px; height: 26px; }
+.pdf-find__count { min-width: 64px; color: var(--text-2); font-size: var(--text-xs); text-align: center; font-variant-numeric: tabular-nums; }
+.pdf-hit { position: absolute; background: rgba(255, 196, 0, 0.35); border-radius: 2px; pointer-events: none; mix-blend-mode: multiply; }
+.pdf-hit--current { background: rgba(255, 140, 0, 0.55); outline: 1px solid rgba(214, 100, 0, 0.9); }
+
 .pdf-flash {
   position: absolute;
   background: var(--accent);

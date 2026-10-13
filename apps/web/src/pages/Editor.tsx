@@ -1272,6 +1272,7 @@ export default function Editor() {
             >
               {ENGINES.map((e) => <option key={e.id} value={e.id}>{e.label}</option>)}
             </select>
+            <button className="btn btn--ghost btn--small" onClick={() => pdfRef.current?.openFind()} title={`Find in PDF (${shortcut('F')} with the preview focused)`} data-testid="pdf-find-open">Find</button>
             <div className="zoom" data-testid="zoom-controls">
               <button className="btn btn--ghost btn--small" onClick={() => setZoom((z) => Math.max(0.5, +(z - 0.1).toFixed(2)))} title="Zoom out" aria-label="Zoom out">−</button>
               <button className="zoom__label" onClick={() => setZoom(1)} title="Reset to fit width" aria-label={`PDF zoom ${Math.round(zoom * 100)}%, click to reset`}>{Math.round(zoom * 100)}%</button>
