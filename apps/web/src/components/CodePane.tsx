@@ -65,8 +65,6 @@ export interface CodePaneHandle {
 }
 
 /** Comment highlight decorations, updatable via an effect and tracking edits. */
-const commentMark = Decoration.mark({ class: 'cm-comment-range' });
-const commentResolvedMark = Decoration.mark({ class: 'cm-comment-range cm-comment-resolved' });
 const commentField = StateField.define<DecorationSet>({
   create() { return Decoration.none; },
   update(deco, tr) {
@@ -78,7 +76,8 @@ const commentField = StateField.define<DecorationSet>({
           e.value
             .filter((r) => r.from < r.to && r.to <= docLen)
             .sort((a, b) => a.from - b.from)
-            .map((r) => (r.resolved ? commentResolvedMark : commentMark).range(r.from, r.to)),
+            // The id rides on the mark so a double-click can name its thread.
+            .map((r) => Decoration.mark({ class: r.resolved ? 'cm-comment-range cm-comment-resolved' : 'cm-comment-range', attributes: { 'data-comment-id': r.id } }).range(r.from, r.to)),
           true,
         );
       }
@@ -119,6 +118,8 @@ interface Props {
   onDocChanged?(local: boolean): void;
   onStats?(stats: { words: number; selWords: number | null }): void;
   onJumpToPdf?(): void;
+  /** Double-click on commented text: the thread's id. */
+  onCommentActivate?(id: string): void;
   spellcheck?: boolean;
   mode?: EditorMode;
   /** Who this client is to collaborators (awareness): the account when
@@ -185,11 +186,11 @@ function spellcheckAttrs(spellcheck: boolean, filePath: string) {
   });
 }
 
-const CodePane = forwardRef<CodePaneHandle, Props>(function CodePane({ projectId, branch, filePath, rootFile, onUsers, onSave, onDocChanged, onStats, onJumpToPdf, spellcheck = false, mode = 'source', identity }, ref) {
+const CodePane = forwardRef<CodePaneHandle, Props>(function CodePane({ projectId, branch, filePath, rootFile, onUsers, onSave, onDocChanged, onStats, onJumpToPdf, onCommentActivate, spellcheck = false, mode = 'source', identity }, ref) {
   const hostRef = useRef<HTMLDivElement>(null);
   const viewRef = useRef<EditorView | null>(null);
-  const cbRef = useRef({ onDocChanged, onStats, onSave, onJumpToPdf });
-  cbRef.current = { onDocChanged, onStats, onSave, onJumpToPdf };
+  const cbRef = useRef({ onDocChanged, onStats, onSave, onJumpToPdf, onCommentActivate });
+  cbRef.current = { onDocChanged, onStats, onSave, onJumpToPdf, onCommentActivate };
   // Per-mount reconfiguration handles: compartments + the deps visualExtensions needs.
   const reconfRef = useRef<{ modeComp: Compartment; spellComp: Compartment; deps: VisualDeps } | null>(null);
   const lastCommentRanges = useRef<CommentRange[]>([]);
@@ -399,6 +400,16 @@ const CodePane = forwardRef<CodePaneHandle, Props>(function CodePane({ projectId
           aldineTheme,
           EditorView.lineWrapping,
           assistantSelectionActions,
+          // Double-click: the word stays selected as usual, the PDF follows to that place,
+          // and on commented text the Review tab opens at its thread.
+          EditorView.domEventHandlers({
+            dblclick: (e) => {
+              const id = (e.target as HTMLElement | null)?.closest?.('[data-comment-id]')?.getAttribute('data-comment-id');
+              if (id) cbRef.current.onCommentActivate?.(id);
+              requestAnimationFrame(() => cbRef.current.onJumpToPdf?.());
+              return false;
+            },
+          }),
           // browser-native spellcheck on prose (only meaningful for .tex/.md)
           spellComp.of(spellcheckAttrs(spellcheck, filePath)),
           modeComp.of(mode === 'visual' ? visualExtensions(deps) : []),

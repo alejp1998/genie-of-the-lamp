@@ -139,7 +139,7 @@ const PdfPane = forwardRef<PdfPaneHandle, Props>(function PdfPane({ pdfUrl, bran
       flash.style.width = `${info.el.clientWidth}px`;
       flash.style.height = `${Math.max(16, h * 2 * info.scale)}px`;
       innerRef.current?.appendChild(flash);
-      setTimeout(() => flash.remove(), 1400);
+      setTimeout(() => flash.remove(), 1100);
     },
     openFind,
   }), [openFind]);

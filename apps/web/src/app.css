@@ -875,9 +875,9 @@ body:has(.modal-backdrop) .assistant-sel { display: none; }
   border-radius: 3px;
   pointer-events: none;
   mix-blend-mode: multiply;
-  animation: pdf-flash 1.4s var(--ease);
+  animation: pdf-flash 1.1s var(--ease);
 }
-@keyframes pdf-flash { 15% { opacity: 0.35; } 100% { opacity: 0; } }
+@keyframes pdf-flash { 12% { opacity: 0.4; } 70% { opacity: 0.3; } 100% { opacity: 0; } }
 
 /* errors panel */
 .errors {
@@ -1084,6 +1084,7 @@ body:has(.modal-backdrop) .assistant-sel { display: none; }
 }
 
 /* review panel */
+.review__item--active { box-shadow: 0 0 0 2px var(--accent); }
 .review__item { border: 1px solid var(--hairline); border-radius: var(--radius-m); padding: 10px; margin-bottom: 8px; display: flex; flex-direction: column; gap: 6px; }
 .review__item--resolved { opacity: 0.62; }
 .review__anchor { border: 0; background: none; text-align: left; padding: 0; cursor: pointer; font-size: var(--text-s); }

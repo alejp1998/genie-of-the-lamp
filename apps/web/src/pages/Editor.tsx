@@ -144,6 +144,7 @@ export default function Editor() {
   const switchMode = (m: EditorMode) => { localStorage.setItem('aldine.editorMode', m); setMode(m); };
   const [comments, setComments] = useState<Comment[]>([]);
   const [composing, setComposing] = useState<{ from: number; to: number; quote: string } | null>(null);
+  const [activeCommentId, setActiveCommentId] = useState<string | null>(null);
   const [composeLines, setComposeLines] = useState<{ before: string; after: string; fromLine: number } | null>(null);
   const codeRef = useRef<CodePaneHandle>(null);
   const pdfRef = useRef<PdfPaneHandle>(null);
@@ -1110,7 +1111,8 @@ export default function Editor() {
               <ReviewPanel
                 comments={comments}
                 activeFile={activeFile}
-                onReveal={revealComment}
+                activeId={activeCommentId}
+                onReveal={(c) => { setActiveCommentId(c.id); revealComment(c); }}
                 onResolve={async (c, resolved) => { await api.resolveComment(id, c.id, resolved); await loadComments(); bumpComments(); }}
                 onDelete={async (c) => { if (!(await dialogs.confirm({ title: 'Delete this comment thread?', confirmLabel: 'Delete thread', danger: true }))) return; await api.deleteComment(id, c.id); await loadComments(); bumpComments(); }}
                 onReply={async (c, body) => { await api.replyComment(id, c.id, body, identity.name); await loadComments(); bumpComments(); }}
@@ -1179,6 +1181,7 @@ export default function Editor() {
                 onDocChanged={onDocChanged}
                 onStats={setStats}
                 onJumpToPdf={jumpToPdf}
+                onCommentActivate={(cid) => { setTab('review'); setSidebarHidden(false); setActiveCommentId(cid); }}
                 spellcheck={spellcheck}
                 mode={mode}
                 identity={identity}

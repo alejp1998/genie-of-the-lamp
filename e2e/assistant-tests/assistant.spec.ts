@@ -288,3 +288,16 @@ test('review comments: Comment from the selection toolbar, then the assistant an
   // Resumed on its own once the typeset reported.
   await expect(page.locator('.assistant__notice--info', { hasText: 'Continued after your review' })).toBeVisible({ timeout: 30_000 });
 });
+
+test('double-clicking commented text opens its thread in the Review tab', async ({ page }) => {
+  await signUp(page.request, 'Ada');
+  const id = await newProject(page.request);
+  const quote = 'Swarm robotics is a field of study.';
+  const from = INTRO.indexOf(quote);
+  const made = await page.request.post(`/api/projects/${id}/comments`, { data: { branch: 'main', file: 'intro.tex', anchor: { from, to: from + quote.length, quote }, body: 'Vague.' } });
+  const comment = await made.json();
+  await page.goto(`/p/${id}?file=intro.tex`);
+  await page.locator(`[data-comment-id="${comment.id}"]`).first().dblclick();
+  await expect(page.getByTestId('tab-review')).toHaveClass(/sidebar__tab--active/);
+  await expect(page.getByTestId(`comment-${comment.id}`)).toHaveClass(/review__item--active/);
+});

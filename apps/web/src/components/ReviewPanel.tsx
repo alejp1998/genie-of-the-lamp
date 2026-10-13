@@ -1,9 +1,12 @@
+import { useEffect } from 'react';
 import { Comment } from '../api';
 import { friendlyDate } from '../util/dates';
 
 interface Props {
   comments: Comment[];
   activeFile: string | null;
+  /** Thread to show selected (from a double-click on its text). */
+  activeId?: string | null;
   onReveal(c: Comment): void;
   onResolve(c: Comment, resolved: boolean): void;
   onDelete(c: Comment): void;
@@ -11,12 +14,16 @@ interface Props {
   onAccept(c: Comment): void;
 }
 
-export default function ReviewPanel({ comments, activeFile, onReveal, onResolve, onDelete, onReply, onAccept }: Props) {
+export default function ReviewPanel({ comments, activeFile, activeId, onReveal, onResolve, onDelete, onReply, onAccept }: Props) {
+  // The thread a double-click in the editor asked for: in view and marked.
+  useEffect(() => {
+    if (activeId) document.querySelector(`[data-testid="comment-${CSS.escape(activeId)}"]`)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+  }, [activeId]);
   const open = comments.filter((c) => !c.resolved);
   const resolved = comments.filter((c) => c.resolved);
 
   const card = (c: Comment) => (
-    <div key={c.id} className={`review__item ${c.resolved ? 'review__item--resolved' : ''}`} data-testid={`comment-${c.id}`}>
+    <div key={c.id} className={`review__item ${c.resolved ? 'review__item--resolved' : ''}${c.id === activeId ? ' review__item--active' : ''}`} data-testid={`comment-${c.id}`} aria-current={c.id === activeId || undefined}>
       <button className="review__anchor" onClick={() => onReveal(c)} title="Jump to the commented text">
         <span className="review__file">{c.file !== activeFile ? c.file + ' · ' : ''}</span>
         <span className="review__quote">“{c.anchor.quote.slice(0, 60)}{c.anchor.quote.length > 60 ? '…' : ''}”</span>
