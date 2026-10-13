@@ -633,9 +633,8 @@ body:has(.modal-backdrop) .assistant-sel { display: none; }
 /* Split: the tabs keep the top share and scroll inside it; the tab row stays on one line. */
 .sidebar--split .sidebar__body { min-height: 60px; }
 /* A short, wide top: the tree flows into balanced columns instead of one long scroll. */
-.sidebar--split .filetree { column-width: 160px; column-gap: 14px; }
-.sidebar--split .filetree .tree__item { break-inside: avoid; }
-.sidebar--split .filetree .tree__actions { column-span: all; }
+.sidebar--split .filetree__items { column-width: 160px; column-gap: 14px; }
+.sidebar--split .filetree__items .tree__item { break-inside: avoid; }
 .sidebar--wide .sidebar__tabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: thin; padding-bottom: 2px; }
 .sidebar--wide .sidebar__tab { flex: 0 1 auto; padding: 0 10px; }
 .sidebar__tab--assistant { display: inline-flex; align-items: center; justify-content: center; gap: 5px; }
@@ -667,7 +666,9 @@ body:has(.modal-backdrop) .assistant-sel { display: none; }
 .tree__item--active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
 .tree__item--dir { color: var(--text-2); font-weight: 600; cursor: default; }
 .tree__icon { flex: none; opacity: 0.75; width: 14px; text-align: center; }
-.tree__actions { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 8px; border-top: 1px solid var(--hairline); }
+/* Pinned to the panel edges while the list scrolls (the body pads 6px, hence -6px). */
+.tree__actions { display: flex; flex-wrap: wrap; gap: 4px; border-top: 1px solid var(--hairline); position: sticky; bottom: -6px; margin: 4px -6px -6px; padding: 3px 8px; background: var(--bg-inset); z-index: 2; }
+.history__commit { display: flex; gap: 6px; position: sticky; top: -6px; margin: -6px -6px 6px; padding: 6px; background: var(--bg-inset); border-bottom: 1px solid var(--hairline); z-index: 2; }
 
 /* editor pane */
 .code-pane { flex: 1; min-height: 0; overflow: hidden; position: relative; }
@@ -829,7 +830,8 @@ body:has(.modal-backdrop) .assistant-sel { display: none; }
 /* file tree upload */
 .filetree { position: relative; min-height: 120px; }
 /* The whole panel takes drops; a faint tint while files hover over it, no drop box. */
-.filetree { min-height: 100%; border-radius: var(--radius-s); transition: background-color 120ms; }
+.filetree { min-height: 100%; display: flex; flex-direction: column; border-radius: var(--radius-s); transition: background-color 120ms; }
+.filetree__items { flex: 1 0 auto; }
 .filetree--drag { background: var(--accent-soft); }
 .pdf-empty {
   position: absolute;

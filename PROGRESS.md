@@ -150,6 +150,9 @@ Running dev log for the MVP in `ALDINE_AGENT_FORK_SPEC.md` (task brief:
   - the file tree's drop box and hint are removed: drops work anywhere on the panel, with a faint tint;
   - assistant e2e 12/12; upstream file-tree/upload/sidebar specs 43/43.
 
+- 2026-10-13 — **Paste from the editor:** copies and cuts in CodeMirror are remembered with file and lines (`assistant/editorClipboard.ts`), and pasting the same text into the chat box adds a `file:lines` chip. Text without a newline and under 30 characters, and text from elsewhere, paste as usual.
+- 2026-10-13 — **Pinned bars:** the file-tree action bar is sticky at the bottom with tighter padding (and the new-file input takes its place); History's checkpoint bar is sticky at the top. Assistant e2e 13/13; upstream file-tree/history specs 42/42.
+
 ### In progress
 - Nothing.
 

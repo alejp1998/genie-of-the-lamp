@@ -9,6 +9,7 @@ import { searchKeymap, highlightSelectionMatches } from '@codemirror/search';
 import { autocompletion, closeBrackets, closeBracketsKeymap, completionKeymap } from '@codemirror/autocomplete';
 import { latex } from 'codemirror-lang-latex';
 import { assistantSelectionActions } from '../assistant/selectionActions';
+import { rememberEditorCopy } from '../assistant/editorClipboard';
 import * as Y from 'yjs';
 import { yCollab, yUndoManagerKeymap } from 'y-codemirror.next';
 import { HocuspocusProvider } from '@hocuspocus/provider';
@@ -409,6 +410,9 @@ const CodePane = forwardRef<CodePaneHandle, Props>(function CodePane({ projectId
               requestAnimationFrame(() => cbRef.current.onJumpToPdf?.());
               return false;
             },
+            // Remembered so a paste into the assistant arrives as a file:lines reference.
+            copy: (_e, v) => { rememberEditorCopy(v, filePath); return false; },
+            cut: (_e, v) => { rememberEditorCopy(v, filePath); return false; },
           }),
           // browser-native spellcheck on prose (only meaningful for .tex/.md)
           spellComp.of(spellcheckAttrs(spellcheck, filePath)),

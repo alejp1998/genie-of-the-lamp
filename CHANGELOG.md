@@ -33,6 +33,12 @@ All notable changes to Aldine are documented here. The format follows
   preview, switched from the panel header or the settings. The file tree
   drops its "Drop files here" box: files dropped anywhere on the panel upload,
   with a faint tint while they hover.
+- Text copied or cut in the editor pastes into the assistant's box as a
+  `file:lines` reference chip, like an attached selection (Genie of the Lamp fork). Short inline
+  bits and text from elsewhere paste as usual.
+- The file tree's New file / Upload / All bar stays pinned to the bottom of
+  the Files panel, and History's checkpoint bar to the top, while the lists
+  scroll.
 - With the assistant deployed (Genie of the Lamp fork): Cite and Zotero start hidden. A gear at
   the left of the sidebar tabs opens the settings, where a new Sidebar tabs
   section shows or hides them for this browser. The header Comment button

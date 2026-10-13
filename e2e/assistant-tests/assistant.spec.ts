@@ -396,3 +396,24 @@ test('the assistant sits below the sidebar tabs by default, and can be a sidebar
   await page.reload();
   await expect(page.locator('.assistant-dock').getByTestId('assistant-panel')).toBeVisible();
 });
+
+test('text copied in the editor pastes into the chat box as a file:lines reference, not loose text', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
+  await signUp(page.request, 'Ada');
+  const id = await newProject(page.request);
+  await openAssistant(page, id);
+  // Lines 2–3 of intro.tex.
+  await page.locator('.cm-line', { hasText: 'Swarm robotics is a field of study.' }).click();
+  await page.keyboard.press('Home');
+  await page.keyboard.press('Shift+ArrowDown');
+  await page.keyboard.press('Shift+End');
+  await page.keyboard.press('ControlOrMeta+c');
+  await page.getByTestId('assistant-input').click();
+  await page.keyboard.press('ControlOrMeta+v');
+  await expect(page.getByTestId('assistant-input')).toHaveValue('');
+  await expect(page.locator('.assistant__composer [data-testid=assistant-attachment]')).toContainText('intro.tex:2–3');
+  // Text from elsewhere pastes as usual.
+  await page.evaluate(() => navigator.clipboard.writeText('a note from somewhere else entirely'));
+  await page.keyboard.press('ControlOrMeta+v');
+  await expect(page.getByTestId('assistant-input')).toHaveValue('a note from somewhere else entirely');
+});

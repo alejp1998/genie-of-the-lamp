@@ -45,7 +45,7 @@ export default function HistoryPanel({ projectId, branch, version = 0, live = fa
 
   return (
     <div className="panel-list" data-testid="history-panel">
-      <div style={{ display: 'flex', gap: 6, padding: '2px 0 8px' }}>
+      <div className="history__commit">
         <input
           className="input"
           style={{ flex: 1, minWidth: 0 }}

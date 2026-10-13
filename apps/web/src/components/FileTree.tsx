@@ -200,14 +200,16 @@ export default function FileTree({ files, active, rootFile, projectId, branch, o
       onDragLeave={() => setDragOver(false)}
       onDrop={async (e) => { e.preventDefault(); setDragOver(false); if (e.dataTransfer.files.length) await uploadFiles(e.dataTransfer.files); }}
     >
-      {tree.map((n) => renderNode(n, 0))}
+      <div className="filetree__items">{tree.map((n) => renderNode(n, 0))}</div>
 
       {adding ? (
-        <input
-          autoFocus className="input" style={{ margin: '4px 0' }} placeholder="chapter.tex" value={name} data-testid="new-file-name"
-          onChange={(e) => setName(e.target.value)} onBlur={submit}
-          onKeyDown={(e) => { if (e.key === 'Enter') submit(); if (e.key === 'Escape') { setAdding(false); setName(''); } }}
-        />
+        <div className="tree__actions">
+          <input
+            autoFocus className="input" style={{ flex: 1 }} placeholder="chapter.tex" value={name} data-testid="new-file-name"
+            onChange={(e) => setName(e.target.value)} onBlur={submit}
+            onKeyDown={(e) => { if (e.key === 'Enter') submit(); if (e.key === 'Escape') { setAdding(false); setName(''); } }}
+          />
+        </div>
       ) : (
         <div className="tree__actions">
           <button className="btn btn--ghost btn--small" onClick={startAdding} data-testid="new-file">+ New file</button>

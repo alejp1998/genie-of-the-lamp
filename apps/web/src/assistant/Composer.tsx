@@ -1,4 +1,5 @@
 import { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import { copyLabel, editorOrigin } from './editorClipboard';
 import { openVirtualDoc } from '../components/VirtualDocs';
 import type { Attachment, EditorContext, GatewayConfig } from './api';
 import { intake, IntakeError } from './fileIntake';
@@ -199,6 +200,14 @@ const Composer = forwardRef<ComposerHandle, Props>(function Composer({ config, c
             // Files copied in a file manager or a screenshot tool arrive as files.
             if (e.clipboardData.files.length) { e.preventDefault(); void addFiles(e.clipboardData.files); return; }
             const t = e.clipboardData.getData('text/plain');
+            // Copied in the editor: a reference chip, like an attached selection.
+            const origin = editorOrigin(t);
+            if (origin) {
+              e.preventDefault();
+              const name = copyLabel(origin);
+              setPending((p) => (p.some((x) => x.label === name) ? p : [...p, { id: nextId(), label: name, attachment: { kind: 'text', name, text: origin.text }, preview: { kind: 'text', name, text: origin.text } }]));
+              return;
+            }
             if (t.length > PASTE_CHARS || t.split('\n').length > PASTE_LINES) {
               e.preventDefault();
               const name = `Pasted text ${++pastes.current}`;
