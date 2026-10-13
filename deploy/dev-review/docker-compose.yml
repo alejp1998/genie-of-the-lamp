@@ -1,0 +1,96 @@
+# Live-review dev stack: the source tree runs in containers (hot reload), and
+# only the web UI is published, on the ZeroTier address. Docker-published
+# ports are reachable through the host firewall; plain host processes are not.
+#
+#   DEVDATA=$HOME/dev/aladine-devdata REVIEW_BIND=10.211.108.8 HOST_UID=$(id -u) HOST_GID=$(id -g) \
+#     docker compose -f deploy/dev-review/docker-compose.yml up -d
+#
+# Needs `npm install` at the repo root and in agent-gateway/ on the host first
+# (bind-mounted node_modules; glibc images, so native binaries match).
+name: aladine-review
+
+x-user: &user "${HOST_UID:-1000}:${HOST_GID:-1000}"
+
+services:
+  aldine:
+    image: node:22-bookworm # not -slim: Aldine shells out to git
+    user: *user
+    working_dir: /repo
+    command: ["npx", "tsx", "watch", "apps/server/src/index.ts"]
+    environment:
+      HOME: /tmp
+      HOST: 0.0.0.0
+      PORT: "3000"
+      AUTH_ENABLED: "1"
+      ALDINE_MCP: "1"
+      DATA_DIR: /devdata/data
+      META_DIR: /devdata/meta
+      CACHE_DIR: /devdata/cache
+      COMPILER_URL: http://compiler:4020
+      RL_MCP_BURST: "600"
+      RL_REGISTER_BURST: "1000"
+      RL_LOGIN_BURST: "1000"
+    volumes:
+      - ../..:/repo
+      - ${DEVDATA:?set DEVDATA}:/devdata
+    networks: [review, egress]
+    init: true
+    restart: unless-stopped
+
+  compiler:
+    image: ghcr.io/trahloff/aldine-compiler:${ALDINE_VERSION:-0.11.0}
+    user: *user
+    environment:
+      HOME: /tmp
+    volumes:
+      - ${DEVDATA:?set DEVDATA}/data:/data
+    networks: [review]
+    mem_limit: 2g
+    pids_limit: 256
+    cap_drop: [ALL]
+    security_opt: [no-new-privileges]
+    init: true
+    restart: unless-stopped
+
+  gateway:
+    image: node:24-bookworm-slim
+    user: *user
+    working_dir: /repo/agent-gateway
+    command: ["node", "--disable-warning=ExperimentalWarning", "--watch", "src/index.ts"]
+    env_file: ../../agent-gateway/.env
+    environment:
+      HOME: /tmp
+      ALDINE_URL: http://aldine:3000
+      AGENT_GATEWAY_HOST: 0.0.0.0
+      AGENT_GATEWAY_PORT: "3300"
+      AGENT_DATA_DIR: /devdata/gateway
+      LOCAL_LLM_BASE_URL: ${LOCAL_LLM_BASE_URL:-http://10.211.108.8:11439/v1}
+      LOCAL_LLM_MODEL: ${LOCAL_LLM_MODEL:-gpt-oss-20b}
+    volumes:
+      - ../..:/repo
+      - ${DEVDATA:?set DEVDATA}:/devdata
+    networks: [review, egress]
+    init: true
+    restart: unless-stopped
+
+  web:
+    image: node:22-bookworm-slim
+    user: *user
+    working_dir: /repo/apps/web
+    command: ["npx", "vite", "--host", "0.0.0.0", "--port", "8095", "--strictPort"]
+    environment:
+      HOME: /tmp
+      ALDINE_DEV_API: http://aldine:3000
+      AGENT_GATEWAY_URL: http://gateway:3300
+    volumes:
+      - ../..:/repo
+    ports:
+      - "${REVIEW_BIND:-127.0.0.1}:8095:8095"
+    networks: [review, egress]
+    init: true
+    restart: unless-stopped
+
+networks:
+  review:
+    internal: true # the compiler (and anything else only on it) has no route out
+  egress: {}

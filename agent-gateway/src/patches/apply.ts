@@ -199,7 +199,7 @@ export async function acceptProposal(deps: AcceptDeps, args: { proposal: Proposa
 
 export function rejectProposal(store: Store, args: { proposal: Proposal; session: Session; identity: Identity }): Proposal {
   const { proposal, session, identity } = args;
-  if (proposal.status !== 'pending' && proposal.status !== 'stale') throw new ProposalError(`This proposal is already ${proposal.status}`, 409);
+  if (proposal.status !== 'pending' && proposal.status !== 'stale' && proposal.status !== 'failed') throw new ProposalError(`This proposal is already ${proposal.status}`, 409);
   const p = store.updateProposal(proposal.id, { status: 'rejected', decidedBy: identity.user.id, decidedByName: identity.user.name, decidedAt: new Date().toISOString() })!;
   store.audit({ userId: identity.user.id, projectId: proposal.projectId, sessionId: session.id, runId: proposal.runId, action: 'proposal_reject', status: 'ok', detail: { proposal: proposal.id } });
   return p;

@@ -51,3 +51,6 @@ deploy/demo/*.pub
 
 # built MCP App viewer (npm run build:viewer -w apps/server)
 apps/server/assets/pdf-viewer.html
+.data-assistant/
+.data-assistant-gw/
+.secrets-assistant/

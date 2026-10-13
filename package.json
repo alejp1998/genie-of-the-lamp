@@ -17,6 +17,7 @@
     "templates:check": "node scripts/check-templates.mjs",
     "test:e2e": "npx playwright test -c e2e",
     "test:e2e:auth": "npx playwright test -c e2e/playwright.auth.config.ts",
+    "test:e2e:assistant": "npx playwright test -c e2e/playwright.assistant.config.ts",
     "test:e2e:base-path": "npx playwright test -c e2e/playwright.base-path.config.ts",
     "test:e2e:remote": "npx playwright test -c e2e/playwright.remote.config.ts",
     "test:e2e:provisioning": "npx playwright test -c e2e/playwright.provisioning.config.ts"

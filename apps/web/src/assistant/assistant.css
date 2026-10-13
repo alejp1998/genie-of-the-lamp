@@ -178,3 +178,40 @@
   .workspace:has(> .assistant-dock) { position: relative; }
   .assistant-dock { position: absolute; right: 0; top: 0; bottom: 0; z-index: 30; width: calc(100vw - 40px) !important; border-left: 0; box-shadow: var(--shadow-pop); }
 }
+
+/* Proposed changes: a card with the agent's violet edge, the diff, and the decision. */
+.proposal {
+  border: 1px solid var(--hairline);
+  border-left: 3px solid var(--agent);
+  border-radius: var(--radius-m);
+  background: var(--bg-panel);
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: var(--text-s);
+}
+.proposal--rejected, .proposal--stale, .proposal--failed { border-left-color: var(--hairline-strong); }
+.proposal__head { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.proposal__label { font-weight: 600; color: var(--text); flex: none; }
+.proposal__files { color: var(--text-2); font-family: var(--font-mono); font-size: var(--text-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1; }
+.proposal__stats { flex: none; font-family: var(--font-mono); font-size: var(--text-xs); }
+.proposal__add { color: var(--ok-text); }
+.proposal__del { color: var(--error); }
+.proposal__summary { color: var(--text); font-size: var(--text-m); }
+.proposal__diff .diff { max-height: 40vh; font-size: var(--text-xs); white-space: pre-wrap; overflow-wrap: anywhere; }
+.proposal__actions { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.proposal__note { color: var(--text-3); font-size: var(--text-xs); }
+.proposal__status { display: flex; flex-direction: column; gap: 4px; color: var(--text-2); }
+.proposal__status > div { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.proposal__status--warn { color: var(--warn-text); }
+.proposal__sub { color: var(--text-2); }
+.proposal__err { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--error); overflow-wrap: anywhere; }
+.proposal__link { border: 0; background: none; padding: 0; color: var(--accent); font: inherit; cursor: pointer; }
+.proposal__link:hover { text-decoration: underline; }
+.proposal__edit { display: flex; flex-direction: column; gap: 8px; }
+.proposal__edit-file { display: flex; flex-direction: column; gap: 6px; }
+.proposal__path { font-family: var(--font-mono); font-size: var(--text-xs); color: var(--text-2); }
+.proposal__edit-row { display: flex; flex-direction: column; gap: 3px; }
+.proposal__quote { color: var(--text-3); font-family: var(--font-mono); font-size: var(--text-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.proposal__textarea { width: 100%; height: auto; padding: 6px 8px; font: var(--text-s) / 1.45 var(--font-mono); resize: vertical; }

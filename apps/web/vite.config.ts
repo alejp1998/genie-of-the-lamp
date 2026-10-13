@@ -3,6 +3,9 @@ import react from '@vitejs/plugin-react';
 import { execSync } from 'node:child_process';
 import { createRequire } from 'node:module';
 
+// Where the dev server finds the API (a container name when the dev stack runs in Docker).
+const API = process.env.ALDINE_DEV_API || 'http://localhost:3000';
+
 const pkg = createRequire(import.meta.url)('./package.json') as { version: string };
 
 // AGPL section 13 obliges a network instance to offer its users the source of
@@ -31,13 +34,14 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api': 'http://localhost:3000',
-      '/plugins': 'http://localhost:3000',
-      '/oauth/token': 'http://localhost:3000',
-      '/oauth/register': 'http://localhost:3000',
-      '/oauth/revoke': 'http://localhost:3000',
-      '/.well-known': 'http://localhost:3000',
-      '/collab': { target: 'ws://localhost:3000', ws: true },
+      '/api': API,
+      '/plugins': API,
+      '/oauth/token': API,
+      '/oauth/register': API,
+      '/oauth/revoke': API,
+      '/.well-known': API,
+      '/mcp': API,
+      '/collab': { target: API.replace(/^http/, 'ws'), ws: true },
       // Aladine Agent Gateway (agent-gateway/), same origin so the session cookie reaches it.
       '/agent-gateway': process.env.AGENT_GATEWAY_URL || 'http://localhost:3300',
     },

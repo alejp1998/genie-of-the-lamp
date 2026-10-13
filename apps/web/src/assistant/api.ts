@@ -46,11 +46,43 @@ export interface RunEvent {
   data: any;
 }
 
+export interface ProposalChange {
+  path: string;
+  kind: 'edit' | 'create';
+  edits?: { quote: string; replacement: string; occurrence?: number }[];
+  content?: string;
+}
+
+export interface Proposal {
+  id: string;
+  sessionId: string;
+  runId: string;
+  toolCallId: string;
+  status: 'pending' | 'applying' | 'applied' | 'rejected' | 'stale' | 'failed';
+  summary: string;
+  changes: ProposalChange[];
+  diff: string;
+  added: number;
+  removed: number;
+  commit: string | null;
+  author: string | null;
+  edited: boolean;
+  reason: string | null;
+  decidedByName: string | null;
+  compile: { ok: boolean; errorsTotal: number; errors: { file: string | null; line: number | null; message: string }[]; timedOut?: boolean } | null;
+}
+
+export interface AcceptParts {
+  edits?: { change: number; edit: number; replacement: string }[];
+  contents?: { change: number; content: string }[];
+}
+
 export interface SessionDetail {
   session: AssistantSession;
   messages: ChatMessage[];
   runs: RunInfo[];
   activity: RunEvent[];
+  proposals: Proposal[];
   activeRunId: string | null;
 }
 
@@ -106,9 +138,12 @@ export const gateway = {
   deleteSession: (id: string) => call<void>(`/sessions/${encodeURIComponent(id)}`, { method: 'DELETE' }),
   send: (id: string, text: string, context: EditorContext, model?: string) =>
     call<{ run: RunInfo }>(`/sessions/${encodeURIComponent(id)}/messages`, { method: 'POST', body: JSON.stringify({ text, context, ...(model ? { model } : {}) }) }),
+  proposal: (id: string) => call<{ proposal: Proposal }>(`/proposals/${encodeURIComponent(id)}`),
+  accept: (id: string, parts: AcceptParts = {}) => call<{ proposal: Proposal }>(`/proposals/${encodeURIComponent(id)}/accept`, { method: 'POST', body: JSON.stringify(parts) }),
+  reject: (id: string) => call<{ proposal: Proposal }>(`/proposals/${encodeURIComponent(id)}/reject`, { method: 'POST', body: '{}' }),
   cancel: (runId: string) => call<{ cancelled: boolean }>(`/runs/${encodeURIComponent(runId)}/cancel`, { method: 'POST', body: '{}' }),
   /** EventSource reconnects on its own and resumes with Last-Event-ID. */
   events: (runId: string) => new EventSource(withBase(`${GATEWAY}/runs/${encodeURIComponent(runId)}/events`)),
 };
 
-export const RUN_EVENT_TYPES = ['status', 'text', 'tool_start', 'tool_end', 'usage', 'notice', 'error', 'done'] as const;
+export const RUN_EVENT_TYPES = ['status', 'text', 'tool_start', 'tool_end', 'proposal', 'usage', 'notice', 'run_error', 'done'] as const;

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { type AssistantSession, type EditorContext, gateway, type GatewayConfig, RUN_EVENT_TYPES, type SessionDetail } from './api';
+import { type AcceptParts, type AssistantSession, type EditorContext, gateway, type GatewayConfig, type Proposal, RUN_EVENT_TYPES, type SessionDetail } from './api';
 import { applyEvent, buildTranscript, type Item, type LiveState } from './transcript';
 
 const lastSessionKey = (projectId: string) => `aldine.assistant.session.${projectId}`;
@@ -29,7 +29,14 @@ export interface AssistantState {
   rename(title: string): Promise<void>;
   remove(): Promise<void>;
   dismissError(): void;
+  /** Proposals of this session by the tool call that made them. */
+  proposals: Map<string, Proposal>;
+  accept(id: string, parts?: AcceptParts): Promise<void>;
+  reject(id: string): Promise<void>;
 }
+
+const COMPILE_POLL_MS = 1500;
+const COMPILE_POLL_MAX = 120;
 
 export function useAssistant(projectId: string, config: GatewayConfig | null): AssistantState {
   const [sessions, setSessions] = useState<AssistantSession[]>([]);
@@ -38,6 +45,8 @@ export function useAssistant(projectId: string, config: GatewayConfig | null): A
   const [live, setLive] = useState<LiveState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [proposals, setProposals] = useState<Map<string, Proposal>>(new Map());
+  const upsert = useCallback((p: Proposal) => setProposals((m) => new Map(m).set(p.toolCallId, p)), []);
   const streamRef = useRef<EventSource | null>(null);
   const sessionRef = useRef<string | null>(null);
   sessionRef.current = sessionId;
@@ -55,7 +64,10 @@ export function useAssistant(projectId: string, config: GatewayConfig | null): A
 
   const loadDetail = useCallback(async (id: string) => {
     const d = await gateway.session(id);
-    if (sessionRef.current === id) setDetail(d);
+    if (sessionRef.current === id) {
+      setDetail(d);
+      setProposals(new Map((d.proposals ?? []).map((p) => [p.toolCallId, p])));
+    }
     return d;
   }, []);
 
@@ -68,6 +80,7 @@ export function useAssistant(projectId: string, config: GatewayConfig | null): A
     for (const type of RUN_EVENT_TYPES) {
       es.addEventListener(type, (ev) => {
         const e = { id: Number((ev as MessageEvent).lastEventId), type, data: JSON.parse((ev as MessageEvent).data) };
+        if (type === 'proposal') upsert(e.data as Proposal);
         setLive((s) => (s && s.runId === runId ? applyEvent(s, e) : s));
         if (type === 'done') {
           finished = true;
@@ -86,12 +99,13 @@ export function useAssistant(projectId: string, config: GatewayConfig | null): A
         loadDetail(sid).then((d) => { if (!d.activeRunId) setLive(null); }).catch(() => {});
       }
     };
-  }, [closeStream, loadDetail, loadSessions]);
+  }, [closeStream, loadDetail, loadSessions, upsert]);
 
   const select = useCallback((id: string | null) => {
     closeStream();
     setLive(null);
     setDetail(null);
+    setProposals(new Map());
     setSessionId(id);
     writeLast(projectId, id);
     if (!id) return;
@@ -100,6 +114,7 @@ export function useAssistant(projectId: string, config: GatewayConfig | null): A
       .then((d) => {
         if (sessionRef.current !== id) return;
         setDetail(d);
+        setProposals(new Map((d.proposals ?? []).map((p) => [p.toolCallId, p])));
         if (d.activeRunId) {
           const um = d.messages.find((m) => m.runId === d.activeRunId && m.role === 'user');
           const text = um?.blocks.filter((b) => b.type === 'text' && !(b as { meta?: string }).meta).map((b) => (b as { text: string }).text).join('\n') ?? '';
@@ -134,7 +149,7 @@ export function useAssistant(projectId: string, config: GatewayConfig | null): A
         setSessionId(sid);
         sessionRef.current = sid;
         writeLast(projectId, sid);
-        setDetail({ session, messages: [], runs: [], activity: [], activeRunId: null });
+        setDetail({ session, messages: [], runs: [], activity: [], proposals: [], activeRunId: null });
         setSessions((list) => [session, ...list]);
       }
       const { run } = await gateway.send(sid, text, ctx, model);
@@ -177,6 +192,32 @@ export function useAssistant(projectId: string, config: GatewayConfig | null): A
     } catch (e) { setError((e as Error).message); }
   }, [select, sessionId]);
 
+  const accept = useCallback(async (id: string, parts: AcceptParts = {}) => {
+    setError(null);
+    try {
+      const { proposal } = await gateway.accept(id, parts);
+      upsert(proposal);
+      // The compile after an accept runs in the background; follow it until it reports.
+      for (let i = 0; proposal.status === 'applied' && i < COMPILE_POLL_MAX; i++) {
+        await new Promise((r) => setTimeout(r, COMPILE_POLL_MS));
+        const { proposal: p } = await gateway.proposal(id);
+        upsert(p);
+        if (p.compile) break;
+      }
+    } catch (e) {
+      setError((e as Error).message);
+      gateway.proposal(id).then(({ proposal }) => upsert(proposal)).catch(() => {});
+    }
+  }, [upsert]);
+
+  const reject = useCallback(async (id: string) => {
+    setError(null);
+    try {
+      const { proposal } = await gateway.reject(id);
+      upsert(proposal);
+    } catch (e) { setError((e as Error).message); }
+  }, [upsert]);
+
   const items = useMemo(
     () => (detail ? buildTranscript(detail.messages, detail.activity, live?.runId ?? null) : []),
     [detail, live?.runId],
@@ -197,5 +238,8 @@ export function useAssistant(projectId: string, config: GatewayConfig | null): A
     rename,
     remove,
     dismissError: () => setError(null),
+    proposals,
+    accept,
+    reject,
   };
 }

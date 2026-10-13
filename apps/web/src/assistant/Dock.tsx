@@ -84,9 +84,10 @@ interface DockProps {
   getContext(): EditorContext;
   /** Lets the workspace switch off pointer events on the panes while dragging, as for the PDF divider. */
   onResizing(v: boolean): void;
+  onShowHistory?(): void;
 }
 
-export function AssistantDock({ dock, projectId, getContext, onResizing }: DockProps) {
+export function AssistantDock({ dock, projectId, getContext, onResizing, onShowHistory }: DockProps) {
   const [dragging, setDragging] = useState(false);
   if (!dock.config || !dock.open) return null;
   return (
@@ -129,7 +130,7 @@ export function AssistantDock({ dock, projectId, getContext, onResizing }: DockP
         }}
       />
       <div style={{ width: dock.width, flex: 'none', display: 'flex', minHeight: 0 }} className="assistant-dock">
-        <AssistantPanel projectId={projectId} config={dock.config} getContext={getContext} onClose={() => dock.setOpen(false)} />
+        <AssistantPanel projectId={projectId} config={dock.config} getContext={getContext} onClose={() => dock.setOpen(false)} onShowHistory={onShowHistory} />
       </div>
     </>
   );

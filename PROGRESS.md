@@ -5,7 +5,8 @@ Running dev log for the MVP in `ALDINE_AGENT_FORK_SPEC.md` (task brief:
 
 - **Repo:** [github.com/alejp1998/Aladine](https://github.com/alejp1998/Aladine) — work lands on `main`, pushed as we go
   (`upstream` = `trahloff/Aldine`, forked @ `a64536f`, Aldine 0.11.0)
-- **Live review URL (ZeroTier):** **`http://10.211.108.8:8095`**. This is the Vite dev UI bound to the ZeroTier IP only; it proxies to Aldine and the gateway on localhost.
+- **Live review URL (ZeroTier):** **`http://10.211.108.8:8095`**, served by the containerised dev stack `deploy/dev-review/docker-compose.yml` (`docker compose -f deploy/dev-review/docker-compose.yml up -d`; machine settings in the git-ignored `deploy/dev-review/.env`).
+  - The host firewall (ufw, no sudo) blocks plain host processes from ZeroTier. Only Docker-published ports get through, so only the `web` container is published, on the ZeroTier IP. Aldine, the gateway and the compiler run on a private Docker network.
   - Dev login and the test-project link are in `~/dev/aladine-devdata/README.local.md` on the host. They are kept out of git.
 - **Deployment instructions:** `agent-gateway/README.md` (not written yet)
 
@@ -80,6 +81,11 @@ Running dev log for the MVP in `ALDINE_AGENT_FORK_SPEC.md` (task brief:
     - Friendly model labels ("Claude Haiku 5.5").
     - `search_project` reads files over Aldine's 100 KB cap in line windows and skips unreadable files instead of failing. The live run hit this on `IEEEtran.cls`.
   - **Tests.** Web 67/67 (new transcript tests), gateway 30/30, both typechecks clean.
+
+- 2026-10-13 — **Review URL fixed.** The user reported that `:8095` timed out from their machine. Cause: ufw is active and drops non-Docker ports. The dev stack moved into Docker (`deploy/dev-review/`), with source bind-mounted and hot reload. Two follow-up bugs were fixed:
+  - containers first ran as uid 1000 (bash's read-only `UID`), so the variables are now `HOST_UID`/`HOST_GID`;
+  - the slim Node image had no `git`, which gave "Project not found", so the Aldine container now uses `node:22-bookworm`.
+  - The Vite proxy target is now configurable (`ALDINE_DEV_API`), and `/mcp` is proxied too, so Claude Code can connect through the review URL.
 
 ### In progress
 - Phase 4: `propose_patch` and a diff card with Accept / Edit / Reject; anchor rebase, then apply, then auto-compile; the `X-Aldine-Agent-Label` attribution core change; a Playwright e2e test with the mock provider.

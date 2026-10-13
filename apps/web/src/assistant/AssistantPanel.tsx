@@ -4,8 +4,9 @@ import { IconSpark, IconX } from '../components/Icons';
 import { useExitGhost } from '../exitGhost';
 import type { EditorContext, GatewayConfig } from './api';
 import Markdown from './Markdown';
+import ProposalCard from './ProposalCard';
 import type { Item } from './transcript';
-import { useAssistant } from './useAssistant';
+import { type AssistantState, useAssistant } from './useAssistant';
 import './assistant.css';
 
 interface Props {
@@ -14,6 +15,7 @@ interface Props {
   /** Snapshot of what the user is looking at; read when a message is sent. */
   getContext(): EditorContext;
   onClose(): void;
+  onShowHistory?(): void;
 }
 
 const SUGGESTIONS = [
@@ -63,10 +65,33 @@ function ToolLine({ item }: { item: Extract<Item, { kind: 'tool' }> }) {
   );
 }
 
-function Transcript({ items }: { items: Item[] }) {
+interface CardHooks {
+  proposals: AssistantState['proposals'];
+  canDecide: boolean;
+  accept: AssistantState['accept'];
+  reject: AssistantState['reject'];
+  ask(text: string): void;
+  onShowHistory?(): void;
+}
+
+function Transcript({ items, cards }: { items: Item[]; cards: CardHooks }) {
   return (
     <>
       {items.map((it) => {
+        const proposal = it.kind === 'tool' && it.name === 'propose_patch' ? cards.proposals.get(it.id) : undefined;
+        if (proposal) {
+          return (
+            <ProposalCard
+              key={it.key}
+              proposal={proposal}
+              canDecide={cards.canDecide}
+              onAccept={(parts) => cards.accept(proposal.id, parts)}
+              onReject={() => cards.reject(proposal.id)}
+              onAsk={cards.ask}
+              onShowHistory={cards.onShowHistory}
+            />
+          );
+        }
         if (it.kind === 'user') return <div key={it.key} className="assistant__msg assistant__msg--user" data-testid="assistant-user-msg">{it.text}</div>;
         if (it.kind === 'assistant') return <div key={it.key} className="assistant__msg assistant__msg--agent" data-testid="assistant-reply"><Markdown text={it.text} /></div>;
         if (it.kind === 'tool') return <ToolLine key={it.key} item={it} />;
@@ -76,7 +101,7 @@ function Transcript({ items }: { items: Item[] }) {
   );
 }
 
-export default function AssistantPanel({ projectId, config, getContext, onClose }: Props) {
+export default function AssistantPanel({ projectId, config, getContext, onClose, onShowHistory }: Props) {
   const a = useAssistant(projectId, config);
   const dialogs = useDialogs();
   const [text, setText] = useState('');
@@ -125,6 +150,7 @@ export default function AssistantPanel({ projectId, config, getContext, onClose 
   };
 
   const empty = !session && !a.live && !a.loading;
+  const cards: CardHooks = { proposals: a.proposals, canDecide: !readOnly, accept: a.accept, reject: a.reject, ask: (t) => void submit(t), onShowHistory };
 
   return (
     <aside className="pane assistant" data-testid="assistant-panel" aria-label={`${config.agentLabel} assistant`}>
@@ -207,13 +233,13 @@ export default function AssistantPanel({ projectId, config, getContext, onClose 
             </div>
           </div>
         )}
-        <Transcript items={a.items} />
+        <Transcript items={a.items} cards={cards} />
         {a.live && (
           <>
             {a.live.userText && (
               <div className="assistant__msg assistant__msg--user" data-testid="assistant-user-msg">{a.live.userText}</div>
             )}
-            <Transcript items={a.live.items} />
+            <Transcript items={a.live.items} cards={cards} />
             {a.running && (
               <div className="assistant__status" data-testid="assistant-thinking">
                 <span className="dot dot--busy" aria-hidden="true" /> {a.live.status ?? 'Thinking…'}

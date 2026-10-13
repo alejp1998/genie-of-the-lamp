@@ -1315,7 +1315,7 @@ export default function Editor() {
             onInverse={onPdfInverse}
           />
         </section>
-        <AssistantDock dock={dock} projectId={id} getContext={getAssistantContext} onResizing={setResizing} />
+        <AssistantDock dock={dock} projectId={id} getContext={getAssistantContext} onResizing={setResizing} onShowHistory={() => { setTab('history'); setSidebarHidden(false); bumpHistory(); }} />
       </div>
 
       <CommandPalette open={paletteOpen} commands={commands} onClose={() => setPaletteOpen(false)} />
