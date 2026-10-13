@@ -3,7 +3,7 @@
 Running dev log for the MVP in `ALDINE_AGENT_FORK_SPEC.md` (task brief:
 `AGENT_TASK_PROMPT.md`). Updated at the end of every work session.
 
-- **Repo:** [github.com/alejp1998/Aladine](https://github.com/alejp1998/Aladine) — work lands on `main`, pushed as we go
+- **Repo:** [github.com/alejp1998/genie-of-the-lamp](https://github.com/alejp1998/genie-of-the-lamp) — work lands on `main`, pushed as we go
   (`upstream` = `trahloff/Aldine`, forked @ `a64536f`, Aldine 0.11.0)
 - **Live review URL (ZeroTier):** **`http://10.211.108.8:8095`**, served by the containerised dev stack `deploy/dev-review/docker-compose.yml` (`docker compose -f deploy/dev-review/docker-compose.yml up -d`; machine settings in the git-ignored `deploy/dev-review/.env`).
   - The host firewall (ufw, no sudo) blocks plain host processes from ZeroTier. Only Docker-published ports get through, so only the `web` container is published, on the ZeroTier IP. Aldine, the gateway and the compiler run on a private Docker network.
@@ -40,7 +40,7 @@ Running dev log for the MVP in `ALDINE_AGENT_FORK_SPEC.md` (task brief:
 - 2026-10-13 — Anthropic key added to `agent-gateway/.env` (git-ignored, mode 600). Default model
   **`claude-haiku-5-5`**; verified streaming + native tool use (`stop_reason: tool_use`).
 
-- 2026-10-13 — Fork published as **Aladine** (`origin` = `alejp1998/Aladine`, `upstream` = `trahloff/Aldine`).
+- 2026-10-13 — Fork published as **Genie** (`origin` = `alejp1998/genie-of-the-lamp`, `upstream` = `trahloff/Aldine`).
   New README (Lyrebird-style header), pixel-art genie icon + wordmark in `docs/images/`,
   generator `scripts/branding/make_logo.py`.
 
@@ -57,7 +57,7 @@ Running dev log for the MVP in `ALDINE_AGENT_FORK_SPEC.md` (task brief:
     - Every tool input is checked with zod.
     - Hard caps on steps (12), compiles per run (3), tool time, run time and result size.
     - Cancelling keeps the stored history valid.
-  - **API.** Sessions, messages, runs, events, cancel and audit. Runs persist their events, and SSE resumes from `Last-Event-ID`. Sessions are private by default; sharing with the project makes them read-only for others. Mutations need `X-Aladine-Request` and a same-origin `Sec-Fetch-Site`.
+  - **API.** Sessions, messages, runs, events, cancel and audit. Runs persist their events, and SSE resumes from `Last-Event-ID`. Sessions are private by default; sharing with the project makes them read-only for others. Mutations need `X-Genie-Request` and a same-origin `Sec-Fetch-Site`.
   - **Storage.** SQLite through `node:sqlite`, with audit records in a separate `audit.db`.
   - **Tests.** `npm test` passes **29/29** against a fake Aldine. `npm run test:it` passes **4/4** against a real Aldine dev server with real compiles.
   - **Live smoke runs** (`npm run smoke`):

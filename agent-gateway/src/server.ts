@@ -79,7 +79,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     if (req.routeOptions.config?.public) return;
     if (req.method !== 'GET' && req.method !== 'HEAD') {
       // A custom header forces a CORS preflight for any cross-origin attempt; Sec-Fetch-Site catches the rest.
-      if (req.headers['x-aladine-request'] !== '1') return reply.code(403).send({ error: 'Request rejected: missing X-Aladine-Request header' });
+      if (req.headers['x-genie-request'] !== '1') return reply.code(403).send({ error: 'Request rejected: missing X-Genie-Request header' });
       const site = req.headers['sec-fetch-site'];
       if (site && site !== 'same-origin' && site !== 'none') return reply.code(403).send({ error: 'Request rejected: cross-site requests are not allowed' });
     }

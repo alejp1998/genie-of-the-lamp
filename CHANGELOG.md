@@ -7,21 +7,21 @@ All notable changes to Aldine are documented here. The format follows
 ## [Unreleased]
 
 ### Added
-- Agent Gateway (Aladine fork, `agent-gateway/`): a separate service for the
+- Agent Gateway (Genie of the Lamp fork, `agent-gateway/`): a separate service for the
   in-editor assistant. It checks the Aldine sign-in, acts through `/mcp` with a
   short-lived token scoped to one project, streams chat runs, keeps chat
   sessions private by default, and writes an audit log.
-- Assistant panel (Aladine fork): a right-hand pane, shown only when an Agent
+- Assistant panel (Genie of the Lamp fork): a right-hand pane, shown only when an Agent
   Gateway answers at `/agent-gateway`. It has streaming chat with
   human-readable tool activity, the open file, cursor and selection attached
   to each message, and private or project-shared chat sessions. It becomes a
   drawer on phones.
-- Assistant proposals (Aladine fork): word-level diffs with Accept, Edit and
+- Assistant proposals (Genie of the Lamp fork): word-level diffs with Accept, Edit and
   Reject. Accepted changes commit as "<you> (via Paper Assistant)". The
   assistant can answer review comments one by one, replying and resolving each
   on Accept. Attachments: `@` file references, pasted or dropped text files,
   PDFs and screenshots.
-- Assistant research tools (Aladine fork): literature search on OpenAlex and
+- Assistant research tools (Genie of the Lamp fork): literature search on OpenAlex and
   arXiv, open-access full-text reading, web search through a bundled private
   SearXNG, and reading links, all behind SSRF-safe fetching. Answers show
   their sources as cards. A proposal can add BibTeX entries (via

@@ -1,10 +1,10 @@
-# SearXNG for the Aladine Agent Gateway: a private metasearch engine the
+# SearXNG for the Genie Agent Gateway: a private metasearch engine the
 # gateway queries over the internal network (never published). The secret key
 # comes from SEARXNG_SECRET.
 use_default_settings: true
 
 general:
-  instance_name: "Aladine research search"
+  instance_name: "Genie research search"
 
 server:
   limiter: false        # only the gateway talks to it

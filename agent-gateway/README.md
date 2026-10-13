@@ -1,6 +1,6 @@
-# Aladine Agent Gateway
+# Genie Agent Gateway
 
-The service behind the assistant panel in Aladine. It authenticates Aldine users, runs a bounded tool-using agent against Aldine's own MCP server with a short-lived credential scoped to the user and the project, and streams the work to the browser. Every change it suggests is a proposal that a person accepts, edits or rejects; accepted changes become Git commits authored as `<user> (via Paper Assistant)`.
+The service behind the assistant panel in Genie. It authenticates Aldine users, runs a bounded tool-using agent against Aldine's own MCP server with a short-lived credential scoped to the user and the project, and streams the work to the browser. Every change it suggests is a proposal that a person accepts, edits or rejects; accepted changes become Git commits authored as `<user> (via Paper Assistant)`.
 
 - [Run Aldine, its compiler and the gateway together](#run-aldine-its-compiler-and-the-gateway-together)
 - [Configuration](#configuration)
@@ -15,7 +15,7 @@ The service behind the assistant panel in Aladine. It authenticates Aldine users
 You need Docker with Compose v2.24 or newer (the overlay uses `!reset`).
 
 ```bash
-git clone git@github.com:alejp1998/Aladine.git && cd Aladine
+git clone git@github.com:alejp1998/genie-of-the-lamp.git && cd genie-of-the-lamp
 
 # 1. Provider key and model (kept on the server, never sent to the browser)
 cp agent-gateway/.env.example agent-gateway/.env
@@ -35,7 +35,7 @@ The overlay leaves Aldine's own compose file as it is. Its volumes (`aldine-data
 |---|---|
 | `app` | Built from this fork's source, which adds the assistant panel and agent attribution. Auth and MCP are on, and it is no longer published directly. |
 | `compiler` | Unchanged. |
-| `gateway` | **New.** It listens on the `frontend` network and keeps its SQLite data in the `aladine-agent` volume. |
+| `gateway` | **New.** It listens on the `frontend` network and keeps its SQLite data in the `genie-agent` volume. |
 | `front` | **New.** Caddy routes `/agent-gateway/*` to the gateway and everything else to the app. It is the only published port. |
 
 ### Address and port
@@ -43,11 +43,11 @@ The overlay leaves Aldine's own compose file as it is. Its volumes (`aldine-data
 The front proxy binds `127.0.0.1:8080` by default. Two variables change that, either inline or in a `.env` file next to the compose files:
 
 ```bash
-ALADINE_BIND=0.0.0.0 ALADINE_PORT=8080 docker compose -f docker-compose.yml -f docker-compose.agent.yml up -d
+GENIE_BIND=0.0.0.0 GENIE_PORT=8080 docker compose -f docker-compose.yml -f docker-compose.agent.yml up -d
 ```
 
-- **Reachable from a private network:** bind to that interface's address, e.g. `ALADINE_BIND=10.211.108.8` for ZeroTier. Docker-published ports pass a host firewall such as ufw, while ports opened by plain host processes do not.
-- **On the internet:** put TLS in front (Caddy with a domain, or your own proxy). Set `ALADINE_PUBLIC_URL=https://latex.example.org` so the cookies are `Secure` and MCP links are absolute.
+- **Reachable from a private network:** bind to that interface's address, e.g. `GENIE_BIND=10.211.108.8` for ZeroTier. Docker-published ports pass a host firewall such as ufw, while ports opened by plain host processes do not.
+- **On the internet:** put TLS in front (Caddy with a domain, or your own proxy). Set `GENIE_PUBLIC_URL=https://latex.example.org` so the cookies are `Secure` and MCP links are absolute.
 
 ### Upgrading and stopping
 
@@ -98,11 +98,11 @@ The app side of the overlay sets the Aldine variables it needs:
 
 The assistant panel suits one-at-a-time, reviewed edits. For larger or programmatic work, connect Claude Code (or any MCP client) to the same server:
 
-1. In Aladine, open **Account → Agent access** and create a token. Scope it to the projects it should touch.
+1. In Genie, open **Account → Agent access** and create a token. Scope it to the projects it should touch.
 2. Add the server to Claude Code:
 
    ```bash
-   claude mcp add --transport http aladine http://localhost:8080/mcp \
+   claude mcp add --transport http genie http://localhost:8080/mcp \
      --header "Authorization: Bearer aldn_…" \
      --header "X-Aldine-Agent-Label: Claude Code"
    ```
@@ -183,7 +183,7 @@ Chats are private to their owner. **Share with project collaborators** makes one
 - **Keys.** Provider keys live only in the gateway's environment. The browser talks only to the gateway, and responses never include keys or provider internals such as reasoning signatures.
 - **Access.**
   - Every request is authenticated against Aldine. Every project route asks Aldine whether this user may open the project, and every Aldine call uses a token scoped to that one project. Aldine enforces permissions server-side, as it does for any client.
-  - Mutations require an `X-Aladine-Request: 1` header and a same-origin `Sec-Fetch-Site`, on top of `SameSite=Lax` cookies.
+  - Mutations require an `X-Genie-Request: 1` header and a same-origin `Sec-Fetch-Site`, on top of `SameSite=Lax` cookies.
 - **Writes.** Only a person's Accept writes, and only after anchor and version checks. The audit log (`audit.db`, kept apart from chat content) records every tool call with its tool name, argument hash, status and duration, plus every run, proposal decision, share change and comment answer. Cookies and tokens are redacted from the logs.
 - **Limits.** Steps, compiles, tool and run time, result sizes, attachment sizes and counts (4 images up to 5 MB each, 3 PDFs up to 20 MB each), and a bounded chain of automatic continuations.
 - **Outbound requests.** The research tools fetch only `http(s)` URLs that resolve to public addresses. The check runs on the address actually connected to, which also defeats DNS rebinding. Redirects are re-checked at every hop, and each request has a 15 s time limit and a 10 MB size limit. Fetched text is labelled to the model as untrusted evidence, never instructions. Only the search queries and URLs leave the server, never project text. SearXNG runs on the internal network and is never published. arXiv requests go one at a time, 3 s apart, as arXiv asks.
@@ -213,6 +213,6 @@ For live development with hot reload, `deploy/dev-review/docker-compose.yml` run
 ## Operations
 
 - **Health:** `GET /agent-gateway/health`.
-- **Data:** chats, runs, events and proposals are in `gateway.db`; the audit log is in `audit.db`. Both live in `AGENT_DATA_DIR` (the `aladine-agent` volume). Back it up together with Aldine's volumes.
+- **Data:** chats, runs, events and proposals are in `gateway.db`; the audit log is in `audit.db`. Both live in `AGENT_DATA_DIR` (the `genie-agent` volume). Back it up together with Aldine's volumes.
 - **Restarts:** runs that were in flight are marked failed at boot. Aldine's version counters live in memory, so an Aldine restart makes pending proposals re-validate on Accept. The anchor rebase usually still applies them; when it can't, they turn stale and the panel offers to redo them.
 - **Cost:** the Anthropic adapter caches the stable prefix (tools, system prompt, prior turns). Token usage is recorded on each run.

@@ -7,7 +7,7 @@
 #
 # Needs `npm install` at the repo root and in agent-gateway/ on the host first
 # (bind-mounted node_modules; glibc images, so native binaries match).
-name: aladine-review
+name: genie-review
 
 x-user: &user "${HOST_UID:-1000}:${HOST_GID:-1000}"
 
@@ -77,7 +77,7 @@ services:
   searxng:
     image: searxng/searxng:latest
     environment:
-      SEARXNG_SECRET: ${SEARXNG_SECRET:-aladine-dev-review-not-secret}
+      SEARXNG_SECRET: ${SEARXNG_SECRET:-genie-dev-review-not-secret}
       SEARXNG_BASE_URL: http://searxng:8080/
     volumes:
       - ../agent/searxng/settings.yml:/etc/searxng/settings.yml:ro

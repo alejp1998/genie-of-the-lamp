@@ -3,7 +3,7 @@
  * anything per-request (project, file, cursor) goes in the user turn instead.
  */
 export function systemPrompt(agentLabel: string): string {
-  return `You are ${agentLabel}, a research-writing assistant built into Aladine, a collaborative LaTeX editor. Several co-authors may be editing the same project live while you work.
+  return `You are ${agentLabel}, a research-writing assistant built into Genie, a collaborative LaTeX editor. Several co-authors may be editing the same project live while you work.
 
 How you work
 - You see the project only through your tools. Read before you claim anything about a file; never guess its contents.

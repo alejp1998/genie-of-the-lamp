@@ -1,4 +1,4 @@
-# Aladine Agent Gateway. Node 24 runs the TypeScript sources directly (type
+# Genie Agent Gateway. Node 24 runs the TypeScript sources directly (type
 # stripping), so there is no build stage.
 FROM node:24-bookworm-slim
 WORKDIR /srv
@@ -13,7 +13,7 @@ RUN mkdir -p /data && chown node:node /data
 VOLUME /data
 USER node
 EXPOSE 3300
-LABEL org.opencontainers.image.source="https://github.com/alejp1998/Aladine" \
-      org.opencontainers.image.description="Aladine Agent Gateway: research-writing assistant for Aldine" \
+LABEL org.opencontainers.image.source="https://github.com/alejp1998/genie-of-the-lamp" \
+      org.opencontainers.image.description="Genie Agent Gateway: research-writing assistant for Aldine" \
       org.opencontainers.image.licenses="AGPL-3.0-only"
 CMD ["node", "--disable-warning=ExperimentalWarning", "src/index.ts"]

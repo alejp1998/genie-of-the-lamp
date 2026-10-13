@@ -1,6 +1,6 @@
 import { defineConfig } from '@playwright/test';
 
-/** Aladine assistant suite: Aldine with auth + MCP on :3260, the Agent Gateway
+/** Genie assistant suite: Aldine with auth + MCP on :3260, the Agent Gateway
  *  on :3261 with the scripted mock model (no provider key, no cost), and a
  *  same-origin front proxy on :3262 that the browser talks to. No compiler:
  *  the typeset after an accept reports a failure, which the tests accept.

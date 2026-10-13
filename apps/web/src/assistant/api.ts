@@ -141,7 +141,7 @@ export class GatewayError extends Error {
 
 async function call<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
-  if (init.method && init.method !== 'GET') headers.set('x-aladine-request', '1');
+  if (init.method && init.method !== 'GET') headers.set('x-genie-request', '1');
   if (init.body) headers.set('content-type', 'application/json');
   const res = await fetch(withBase(GATEWAY + path), { ...init, headers, credentials: 'same-origin' });
   if (res.status === 204) return undefined as T;

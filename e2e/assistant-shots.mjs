@@ -1,24 +1,24 @@
-// Visual check of the Aladine assistant panel against a running stack.
-//   ALADINE_URL=http://10.211.108.8:8095 ALADINE_EMAIL=… ALADINE_PASSWORD=… ALADINE_PROJECT=<id> \
-//   ALADINE_ASK="question" OUT=/path/to/dir node e2e/assistant-shots.mjs
+// Visual check of the Genie assistant panel against a running stack.
+//   GENIE_URL=http://10.211.108.8:8095 GENIE_EMAIL=… GENIE_PASSWORD=… GENIE_PROJECT=<id> \
+//   GENIE_ASK="question" OUT=/path/to/dir node e2e/assistant-shots.mjs
 // Screens: panel empty (light + dark), a streamed answer, the phone drawer.
-// Asking spends model credit; leave ALADINE_ASK empty to skip it.
+// Asking spends model credit; leave GENIE_ASK empty to skip it.
 import { chromium } from '@playwright/test';
 import fs from 'node:fs';
 import path from 'node:path';
 
-const BASE = process.env.ALADINE_URL || 'http://localhost:5173';
+const BASE = process.env.GENIE_URL || 'http://localhost:5173';
 const OUT = process.env.OUT || 'e2e/shots/assistant';
-const PROJECT = process.env.ALADINE_PROJECT;
-const ASK = process.env.ALADINE_ASK || '';
-const OPEN_FILE = process.env.ALADINE_OPEN_FILE || '';
+const PROJECT = process.env.GENIE_PROJECT;
+const ASK = process.env.GENIE_ASK || '';
+const OPEN_FILE = process.env.GENIE_OPEN_FILE || '';
 fs.mkdirSync(OUT, { recursive: true });
 
 const browser = await chromium.launch();
 async function session(viewport, theme) {
   const ctx = await browser.newContext({ viewport, deviceScaleFactor: 2 });
   const page = await ctx.newPage();
-  const login = await page.request.post(`${BASE}/api/auth/login`, { data: { email: process.env.ALADINE_EMAIL, password: process.env.ALADINE_PASSWORD } });
+  const login = await page.request.post(`${BASE}/api/auth/login`, { data: { email: process.env.GENIE_EMAIL, password: process.env.GENIE_PASSWORD } });
   if (!login.ok()) throw new Error(`login failed: ${login.status()} ${await login.text()}`);
   await page.addInitScript((t) => localStorage.setItem('aldine.theme', t), theme);
   await page.goto(`${BASE}/p/${PROJECT}${OPEN_FILE ? `?file=${encodeURIComponent(OPEN_FILE)}` : ''}`);

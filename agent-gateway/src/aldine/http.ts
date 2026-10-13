@@ -126,7 +126,7 @@ export class HttpAldine implements AldineApi {
         const transport = new StreamableHTTPClientTransport(new URL(this.opts.baseUrl + '/mcp'), {
           requestInit: { headers: { authorization: `Bearer ${token}`, 'x-aldine-agent-label': this.opts.agentLabel } },
         });
-        const client = new Client({ name: 'aladine-agent-gateway', version: '0.1.0' });
+        const client = new Client({ name: 'genie-agent-gateway', version: '0.1.0' });
         await client.connect(transport);
         return client;
       })();

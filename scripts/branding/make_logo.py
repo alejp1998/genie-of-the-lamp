@@ -1,4 +1,4 @@
-"""Pixel-art Aladine icon: a genie rising from an oil lamp, writing LaTeX.
+"""Pixel-art Genie of the Lamp icon: a genie rising from an oil lamp, writing LaTeX.
 
 Shapes are drawn aliased on a small grid, rim-shaded and outlined per object
 (Lyrebird-icon style), then upscaled with nearest-neighbour.
@@ -9,7 +9,7 @@ from PIL import Image, ImageDraw
 
 N = 110          # grid size (Lyrebird icon is ~109 px art at 4x)
 SCALE = 4
-OUT = sys.argv[1] if len(sys.argv) > 1 else "aladine-icon.png"
+OUT = sys.argv[1] if len(sys.argv) > 1 else "genie-icon.png"
 
 OUTLINE = (27, 42, 56)
 BLUE = [(38, 62, 84), (62, 97, 125), (95, 136, 168), (143, 180, 204)]       # dark..light

@@ -1,9 +1,9 @@
 <div align="center">
-    <img src="docs/images/aladine-icon.png" alt="Aladine icon: a pixel-art genie rising from an oil lamp, writing LaTeX with a quill" width="260" height="260">
+    <img src="docs/images/genie-icon.png" alt="Genie of the Lamp icon: a pixel-art genie rising from an oil lamp, writing LaTeX with a quill" width="260" height="260">
 
 <picture>
-<source media="(prefers-color-scheme: dark)" srcset="docs/images/aladine-wordmark-dark.svg">
-<img src="docs/images/aladine-wordmark-light.svg" alt="ALADINE" height="48">
+<source media="(prefers-color-scheme: dark)" srcset="docs/images/genie-wordmark-dark.svg">
+<img src="docs/images/genie-wordmark-light.svg" alt="GENIE OF THE LAMP" height="48">
 </picture>
 
 **Collaborative LaTeX with a research-writing assistant built in. It reads your project, compiles it, diagnoses errors, and proposes edits as reviewable diffs that become Git commits only when you approve them.**
@@ -26,9 +26,9 @@
 > proposals, attribution and review-comment handling. The project is young: interfaces and configuration may
 > still change before the first tag. Progress is logged in [PROGRESS.md](PROGRESS.md).
 
-## What is Aladine?
+## What is Genie of the Lamp?
 
-Aladine is **Aldine with a native research-writing assistant**. Collaborators keep writing and reviewing LaTeX in the browser exactly as before, with real-time multi-cursor editing, Git-native branches, sandboxed ~2 s recompiles and the PDF preview. Any authorized collaborator can also open an assistant panel and chat with an agent that understands the current project.
+Genie of the Lamp ("Genie" for short) is **Aldine with a native research-writing assistant**. Collaborators keep writing and reviewing LaTeX in the browser exactly as before, with real-time multi-cursor editing, Git-native branches, sandboxed ~2 s recompiles and the PDF preview. Any authorized collaborator can also open an assistant panel and chat with an agent that understands the current project.
 
 The assistant runs in a separate **Agent Gateway** service, not inside Aldine's core:
 
@@ -40,7 +40,7 @@ Reading, searching, compiling and diagnosing happen automatically. **Writing doe
 
 ```mermaid
 flowchart LR
-  subgraph Browser["Aladine in the browser"]
+  subgraph Browser["Genie in the browser"]
     E[Editor · file tree · PDF · history]
     P[Assistant panel]
   end
@@ -60,9 +60,9 @@ flowchart LR
   X --> C[Sandboxed TeX Live compiler]
 ```
 
-## Why "Aladine"?
+## Why "Genie of the Lamp"?
 
-The name joins **Aldine** and **Aladdin**. Aldine, named after the Aldine Press of Aldus Manutius, the Venetian printer behind italic type and the pocket book, is the editor underneath. Aladdin is the boy with the lamp. This fork puts a genie in Aldine's lamp, with one change to the story: it grants no wish until you have read the diff. The genie can read, search, compile and explain whenever you ask, but it writes nothing you haven't approved, and every wish it grants is recorded in Git.
+Aldine, the editor underneath, is named after the Aldine Press of Aldus Manutius, the Venetian printer behind italic type and the pocket book. This fork puts a genie in Aldine's lamp, with one change to the story: it grants no wish until you have read the diff. The genie can read, search, compile and explain whenever you ask, but it writes nothing you haven't approved, and every wish it grants is recorded in Git.
 
 ## Key features
 
@@ -74,7 +74,7 @@ The name joins **Aldine** and **Aladdin**. Aldine, named after the Aldine Press 
 - 📚 **References**: native Zotero, DOI/arXiv lookup, citation and label indexes
 - 🔌 **MCP endpoint** at `/mcp` for external agents such as Claude Code and claude.ai connectors
 
-**What Aladine adds:**
+**What Genie adds:**
 
 | | Feature |
 |---|---|
@@ -99,7 +99,7 @@ The full product spec is in [ALDINE_AGENT_FORK_SPEC.md](ALDINE_AGENT_FORK_SPEC.m
 Aldine, its sandboxed compiler, the Agent Gateway and a same-origin front proxy, built from this repository:
 
 ```bash
-git clone git@github.com:alejp1998/Aladine.git && cd Aladine
+git clone git@github.com:alejp1998/genie-of-the-lamp.git && cd genie-of-the-lamp
 cp agent-gateway/.env.example agent-gateway/.env      # add ANTHROPIC_API_KEY (or a local model URL)
 docker compose -f docker-compose.yml -f docker-compose.agent.yml up -d --build
 ```
@@ -174,14 +174,14 @@ The Aldine test suites work as upstream: `npm run typecheck -w apps/web`, `npm r
 | `apps/web/` | Aldine React SPA. The assistant panel lives in `src/assistant/`; editor additions are in `src/components/` (previews, document tabs, find in PDF, word diff) |
 | `apps/compiler/` | Sandboxed latexmk wrapper (unchanged) |
 | `claude-plugin/` | Claude Code plugin and skills for driving Aldine over MCP |
-| `docs/` | Aldine docs (`AGENT_API.md`, `OIDC.md`, `SCALING.md`) plus Aladine branding in `docs/images/` |
+| `docs/` | Aldine docs (`AGENT_API.md`, `OIDC.md`, `SCALING.md`) plus Genie branding in `docs/images/` |
 | `deploy/` | Compose overlays, reverse-proxy samples, cloud stacks; `deploy/agent/` (Caddy front), `deploy/dev-review/` (live-review dev stack) |
 | `docker-compose.agent.yml` | Overlay that adds the gateway and front proxy and builds the app from this fork |
 | `PROGRESS.md` | Running dev log: Done / In progress / Blocked / Next |
 
 ## Staying close to upstream
 
-Aladine follows Aldine `main`, which is configured as the `upstream` remote. Collaboration, Git, the compiler and the PDF preview are not forked. New functionality lives in `agent-gateway/` and `apps/web/src/assistant/`. Any change to core code must be small, opt-in, and generic enough to offer upstream, such as attributing MCP writes to a named agent label.
+Genie follows Aldine `main`, which is configured as the `upstream` remote. Collaboration, Git, the compiler and the PDF preview are not forked. New functionality lives in `agent-gateway/` and `apps/web/src/assistant/`. Any change to core code must be small, opt-in, and generic enough to offer upstream, such as attributing MCP writes to a named agent label.
 
 ```bash
 git fetch upstream && git merge upstream/main
@@ -189,13 +189,13 @@ git fetch upstream && git merge upstream/main
 
 ## Contributors
 
-- [Alejandro Jarabo-Peñas](https://alejp.me): Aladine fork and Agent Gateway
+- [Alejandro Jarabo-Peñas](https://alejp.me): Genie of the Lamp fork and Agent Gateway
 - [Tobias Rahloff](https://github.com/trahloff) and the [Aldine contributors](https://github.com/trahloff/Aldine/graphs/contributors): the editor underneath
 
 ## License
 
-[AGPL-3.0-only](LICENSE), the same as Aldine. If you run a modified Aladine as a network service, you must offer its source to its users.
+[AGPL-3.0-only](LICENSE), the same as Aldine. If you run a modified version as a network service, you must offer its source to its users.
 
-"Aldine" and the Aldine logo are marks of Tobias Rahloff (see [TRADEMARK.md](TRADEMARK.md)). Aladine is an independent fork, **based on Aldine**, and is not affiliated with or endorsed by the Aldine project. The Aladine icon and wordmark are generated by [`scripts/branding/make_logo.py`](scripts/branding/make_logo.py) in the pixel-art style of the [Lyrebird](https://github.com/SDU-UAS-Center/lyrebird) icon.
+"Aldine" and the Aldine logo are marks of Tobias Rahloff (see [TRADEMARK.md](TRADEMARK.md)). Genie of the Lamp is an independent fork, **based on Aldine**, and is not affiliated with or endorsed by the Aldine project. The Genie icon and wordmark are generated by [`scripts/branding/make_logo.py`](scripts/branding/make_logo.py) in the pixel-art style of the [Lyrebird](https://github.com/SDU-UAS-Center/lyrebird) icon.
 
-Bug reports and feature requests: [GitHub Issues](https://github.com/alejp1998/Aladine/issues).
+Bug reports and feature requests: [GitHub Issues](https://github.com/alejp1998/genie-of-the-lamp/issues).

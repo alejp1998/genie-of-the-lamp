@@ -26,7 +26,7 @@ after(async () => { await app.close(); store.close(); });
 
 const as = (user: string, init: RequestInit = {}) => ({
   ...init,
-  headers: { cookie: `aldine_session=${user}; other=secret`, 'x-aladine-request': '1', 'content-type': 'application/json', ...(init.headers as Record<string, string> ?? {}) },
+  headers: { cookie: `aldine_session=${user}; other=secret`, 'x-genie-request': '1', 'content-type': 'application/json', ...(init.headers as Record<string, string> ?? {}) },
 });
 
 async function json(res: Response) { return res.json() as Promise<any>; }

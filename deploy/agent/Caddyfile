@@ -1,4 +1,4 @@
-# Same-origin front for Aladine: the browser's Aldine session cookie reaches
+# Same-origin front for Genie: the browser's Aldine session cookie reaches
 # the gateway because both live under one origin.
 {
 	admin off

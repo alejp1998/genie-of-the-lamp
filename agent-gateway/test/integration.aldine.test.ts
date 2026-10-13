@@ -97,7 +97,7 @@ test('minted credential reads files over MCP and is scoped to the project', { sk
 });
 
 test('full gateway run against real Aldine: context, tool call, persisted chat', { skip }, async () => {
-  const h = { cookie: alice.cookie, 'x-aladine-request': '1', 'content-type': 'application/json' };
+  const h = { cookie: alice.cookie, 'x-genie-request': '1', 'content-type': 'application/json' };
   const s = await (await fetch(`${gw}/projects/${projectId}/sessions`, { method: 'POST', headers: h, body: '{}' })).json() as any;
   const sent = await fetch(`${gw}/sessions/${s.session.id}/messages`, {
     method: 'POST', headers: h,

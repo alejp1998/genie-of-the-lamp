@@ -77,7 +77,7 @@ beforeEach(() => {
   aldine.compileOk = true;
 });
 
-const as = (user: string, init: RequestInit = {}) => ({ ...init, headers: { cookie: `aldine_session=${user}`, 'x-aladine-request': '1', 'content-type': 'application/json' } });
+const as = (user: string, init: RequestInit = {}) => ({ ...init, headers: { cookie: `aldine_session=${user}`, 'x-genie-request': '1', 'content-type': 'application/json' } });
 const j = async (r: Response) => r.json() as Promise<any>;
 
 const PATCH = {

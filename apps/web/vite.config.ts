@@ -42,7 +42,7 @@ export default defineConfig({
       '/.well-known': API,
       '/mcp': API,
       '/collab': { target: API.replace(/^http/, 'ws'), ws: true },
-      // Aladine Agent Gateway (agent-gateway/), same origin so the session cookie reaches it.
+      // Genie Agent Gateway (agent-gateway/), same origin so the session cookie reaches it.
       '/agent-gateway': process.env.AGENT_GATEWAY_URL || 'http://localhost:3300',
     },
   },

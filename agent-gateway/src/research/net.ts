@@ -17,7 +17,7 @@ export class FetchError extends Error {}
 const MAX_REDIRECTS = 5;
 const DEFAULT_TIMEOUT_MS = 15_000;
 const DEFAULT_MAX_BYTES = 10 * 1024 * 1024;
-const UA = 'AladineResearch/0.1 (+https://github.com/alejp1998/Aladine; research assistant fetching pages a user asked about)';
+const UA = 'GenieResearch/0.1 (+https://github.com/alejp1998/genie-of-the-lamp; research assistant fetching pages a user asked about)';
 
 /** Loopback, private, link-local, CGNAT, multicast, documentation and other non-public ranges. */
 export function isPublicAddress(ip: string): boolean {
