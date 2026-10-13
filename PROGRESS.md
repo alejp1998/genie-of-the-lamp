@@ -30,8 +30,13 @@ Running dev log for the MVP in `ALDINE_AGENT_FORK_SPEC.md` (task brief:
     `Editor.tsx`/`CodePane.tsx` hook-in behind `aldine.experimental.assistant`.
   - `contentVersion` counters are in-memory → proposals go stale on Aldine restart (must regenerate).
 
+- 2026-10-13 — **Decisions confirmed by user:** (1) attribution via small core change — optional
+  `X-Aldine-Agent-Label` header on `/mcp` → commits/presence as `User (via Paper Assistant)`, upstream
+  behaviour unchanged without it; (2) credentials via auto-minted 1h project-scoped PATs from the forwarded
+  session cookie (reuse until expiry, then revoke). Remaining §2 items proceed as proposed.
+
 ### In progress
-- Awaiting confirmation of the design decisions in `agent-gateway/DESIGN.md` §2 before Phase 2.
+- Phase 2 — Gateway skeleton.
 
 ### Blocked
 - Nothing yet. (Anthropic adapter can be built and unit-tested, but live tests need `ANTHROPIC_API_KEY`.)

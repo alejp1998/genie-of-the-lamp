@@ -95,7 +95,7 @@ paths are repo-relative. "Proposed" items are open until confirmed in `PROGRESS.
   - `vite.config.ts` proxies `/api`, `/collab` and the others to `:3000`; dev runs on `:5173`.
 - **Mobile.** At ≤640px the sidebar becomes an absolute overlay drawer. The assistant mirrors this as a drawer anchored on the right.
 
-## 2. Proposed design (pending confirmation)
+## 2. Design (attribution + credentials confirmed 2026-10-13; rest as proposed)
 
 | Concern | Proposal | Core touch |
 |---|---|---|
