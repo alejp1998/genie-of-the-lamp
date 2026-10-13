@@ -35,11 +35,14 @@ Running dev log for the MVP in `ALDINE_AGENT_FORK_SPEC.md` (task brief:
   behaviour unchanged without it; (2) credentials via auto-minted 1h project-scoped PATs from the forwarded
   session cookie (reuse until expiry, then revoke). Remaining §2 items proceed as proposed.
 
+- 2026-10-13 — Anthropic key added to `agent-gateway/.env` (git-ignored, mode 600). Default model
+  **`claude-haiku-5-5`**; verified streaming + native tool use (`stop_reason: tool_use`).
+
 ### In progress
 - Phase 2 — Gateway skeleton.
 
 ### Blocked
-- Nothing yet. (Anthropic adapter can be built and unit-tested, but live tests need `ANTHROPIC_API_KEY`.)
+- Nothing.
 
 ### Next
 - Phase 2 — Gateway skeleton (TS/Fastify, cookie auth, PAT minting, SQLite store, provider adapters, SSE).
