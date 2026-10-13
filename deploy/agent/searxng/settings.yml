@@ -1,0 +1,22 @@
+# SearXNG for the Aladine Agent Gateway: a private metasearch engine the
+# gateway queries over the internal network (never published). The secret key
+# comes from SEARXNG_SECRET.
+use_default_settings: true
+
+general:
+  instance_name: "Aladine research search"
+
+server:
+  limiter: false        # only the gateway talks to it
+  image_proxy: false
+  public_instance: false
+
+search:
+  safe_search: 1
+  autocomplete: ""
+  formats:
+    - html
+    - json              # the gateway reads results as JSON
+
+ui:
+  static_use_hash: true

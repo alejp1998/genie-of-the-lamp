@@ -7,6 +7,7 @@ import type { EditorContext, GatewayConfig } from './api';
 import Composer, { Chips, type ComposerHandle, type Pending, type Prefill } from './Composer';
 import Markdown from './Markdown';
 import ProposalCard from './ProposalCard';
+import Sources from './Sources';
 import type { Item } from './transcript';
 import { type AssistantState, useAssistant } from './useAssistant';
 import './assistant.css';
@@ -46,9 +47,18 @@ function pretty(v: unknown): string {
   return JSON.stringify(v, null, 2);
 }
 
+const citePrompt = (s: { title: string; doi?: string | null; arxivId?: string | null }) =>
+  `Add “${s.title}” (${s.doi ? `doi:${s.doi}` : `arXiv:${s.arxivId}`}) to the bibliography and cite it where it supports the text. Check first that it really supports the sentence you cite it for.`;
+
 function openToolOutput(item: Extract<Item, { kind: 'tool' }>) {
   let parsed: any = null;
   try { parsed = JSON.parse(item.output ?? ''); } catch { /* not JSON */ }
+  // Pages and papers the assistant read open as their text, not as JSON.
+  const read = item.name === 'fetch_url' ? parsed : item.name === 'get_paper' ? parsed?.full_text : null;
+  if (typeof read?.text === 'string') {
+    openVirtualDoc({ id: `tool:${item.id}`, title: `${parsed.title ?? read.url ?? item.name} (as read)`, kind: 'text', content: `${read.url ?? ''}\n\n${read.text}` });
+    return;
+  }
   const isFile = item.name === 'read_file' && typeof parsed?.content === 'string';
   openVirtualDoc({
     id: `tool:${item.id}`,
@@ -125,6 +135,7 @@ function Transcript({ items, cards }: { items: Item[]; cards: CardHooks }) {
         }
         if (it.kind === 'assistant') return <div key={it.key} className="assistant__msg assistant__msg--agent" data-testid="assistant-reply"><Markdown text={it.text} /></div>;
         if (it.kind === 'tool') return <ToolLine key={it.key} item={it} />;
+        if (it.kind === 'sources') return <Sources key={it.key} sources={it.sources} onCite={cards.canDecide ? (s) => cards.ask(citePrompt(s)) : undefined} />;
         return <div key={it.key} className={`assistant__notice assistant__notice--${it.level}`} role="status">{it.message}</div>;
       })}
     </>
@@ -286,6 +297,7 @@ export default function AssistantPanel({ projectId, config, getContext, onClose,
               <Chips items={(a.live.userAttachments ?? []).map((att, i) => ({ key: `live-${i}`, a: att }))} />
             </div>
             <Transcript items={a.live.items} cards={cards} />
+            {a.live.sources && a.live.sources.length > 0 && <Sources sources={a.live.sources} onCite={!readOnly ? (s) => void send(citePrompt(s)) : undefined} />}
             {a.running && (
               <div className="assistant__status" data-testid="assistant-thinking">
                 <span className="dot dot--busy" aria-hidden="true" /> {a.live.status ?? 'Thinking…'}

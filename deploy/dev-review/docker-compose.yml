@@ -66,11 +66,22 @@ services:
       AGENT_DATA_DIR: /devdata/gateway
       LOCAL_LLM_BASE_URL: ${LOCAL_LLM_BASE_URL:-http://10.211.108.8:11439/v1}
       LOCAL_LLM_MODEL: ${LOCAL_LLM_MODEL:-gpt-oss-20b}
+      SEARXNG_URL: http://searxng:8080
     volumes:
       - ../..:/repo
       - ${DEVDATA:?set DEVDATA}:/devdata
     networks: [review, egress]
     init: true
+    restart: unless-stopped
+
+  searxng:
+    image: searxng/searxng:latest
+    environment:
+      SEARXNG_SECRET: ${SEARXNG_SECRET:-aladine-dev-review-not-secret}
+      SEARXNG_BASE_URL: http://searxng:8080/
+    volumes:
+      - ../agent/searxng/settings.yml:/etc/searxng/settings.yml:ro
+    networks: [review, egress]
     restart: unless-stopped
 
   web:

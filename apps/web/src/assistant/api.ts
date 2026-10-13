@@ -73,6 +73,7 @@ export interface Proposal {
   decidedByName: string | null;
   compile: { ok: boolean; errorsTotal: number; errors: { file: string | null; line: number | null; message: string }[]; timedOut?: boolean } | null;
   resolves?: { commentId: string; reply: string; author: string; quote: string; done?: boolean; error?: string }[];
+  references?: { id: string; title?: string; authors?: string[]; year?: number | null; venue?: string | null; bibFile?: string; key?: string; duplicate?: boolean; error?: string }[];
   continueAfterReview?: boolean;
   continuedRunId?: string | null;
 }
@@ -98,6 +99,22 @@ export interface GatewayConfig {
   models: { id: string; label: string; provider: string }[];
   defaultModel: string;
   limits: { maxMessageChars: number };
+  research?: { literature: boolean; web: boolean; fetch: boolean };
+}
+
+/** A paper or page an answer is based on. */
+export interface Source {
+  kind: 'paper' | 'web';
+  title: string;
+  url: string;
+  authors?: string[];
+  year?: number | null;
+  venue?: string | null;
+  doi?: string | null;
+  arxivId?: string | null;
+  citedBy?: number | null;
+  openAccess?: boolean;
+  snippet?: string;
 }
 
 /** What the composer sends along with the text. */

@@ -23,7 +23,12 @@ const ACTIONS: { label: string; prompt: string; testId: string }[] = [
   { label: 'Explain', prompt: 'Explain the selected text in plain words.', testId: 'sel-explain' },
   { label: 'Improve', prompt: 'Improve the wording of the selected text without changing its meaning, claims, citations or labels. Propose it as a change.', testId: 'sel-improve' },
   { label: 'Fix LaTeX', prompt: 'Fix the LaTeX in the selected text (syntax, macros, environments, escaping) without changing the wording. Propose it as a change.', testId: 'sel-fix' },
-  { label: 'Cite', prompt: 'Suggest citations from this project\'s bibliography for the selected text. Use only existing keys and propose the \\cite additions.', testId: 'sel-cite' },
+  { label: 'Cite', prompt: 'Find references for the selected text: prefer entries already in the bibliography (list_citations); otherwise search the literature, check the abstracts, and propose adding the best match (add_references) before the \\cite edit.', testId: 'sel-cite' },
+];
+
+/** Shown only where the gateway has research tools. */
+const RESEARCH_ACTIONS: typeof ACTIONS = [
+  { label: 'Check', prompt: 'Fact-check the selected text: list its checkable claims, search the literature for each, and give a verdict table (supported / partly / contradicted / not found) with sources. Do not change anything yet.', testId: 'sel-check' },
 ];
 
 const MIN_SELECTION = 3;
@@ -55,7 +60,8 @@ function selectionTooltip(state: EditorState): Tooltip | null {
       const sep = document.createElement('span');
       sep.className = 'assistant-sel__sep';
       dom.appendChild(sep);
-      for (const a of ACTIONS) {
+      const research = document.documentElement.dataset.assistantResearch === '1';
+      for (const a of research ? [...ACTIONS, ...RESEARCH_ACTIONS] : ACTIONS) {
         const b = document.createElement('button');
         b.type = 'button';
         b.textContent = a.label;

@@ -43,8 +43,9 @@ export function useAssistantDock(projectId: string): Dock {
       setOpenState(read(openKey(c.user.id, projectId)) === '1');
       // The editor's selection actions show only where an assistant answers.
       document.documentElement.dataset.assistant = '1';
+      if (c.research?.literature) document.documentElement.dataset.assistantResearch = '1';
     });
-    return () => { cancelled = true; delete document.documentElement.dataset.assistant; };
+    return () => { cancelled = true; delete document.documentElement.dataset.assistant; delete document.documentElement.dataset.assistantResearch; };
   }, [projectId]);
 
   useEffect(() => {

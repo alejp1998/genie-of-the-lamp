@@ -1,4 +1,4 @@
-import { type ChatMessage, gateway, type RunEvent } from './api';
+import { type ChatMessage, gateway, type RunEvent, type Source } from './api';
 
 /** The file or pasted text inside its <referenced_file>/<pasted_text> wrapper. */
 const unwrap = (s: string) => s.replace(/^<(referenced_file|pasted_text)[^>]*>\n?/, '').replace(/\n?<\/(referenced_file|pasted_text)>$/, '');
@@ -29,7 +29,21 @@ export type Item =
   | { kind: 'user'; key: string; text: string; attachments?: ItemAttachment[]; context?: string }
   | { kind: 'assistant'; key: string; text: string }
   | { kind: 'tool'; key: string; id: string; name: string; activity: string; summary?: string; ok?: boolean; running: boolean; input?: unknown; output?: string; images?: string[] }
-  | { kind: 'notice'; key: string; level: 'warn' | 'error' | 'info'; message: string };
+  | { kind: 'notice'; key: string; level: 'warn' | 'error' | 'info'; message: string }
+  | { kind: 'sources'; key: string; sources: Source[] };
+
+/** One card per paper or page: same DOI, arXiv id or URL counts once. */
+export function mergeSources(list: Source[]): Source[] {
+  const out: Source[] = [];
+  const seen = new Set<string>();
+  for (const s of list) {
+    const keys = [s.doi && `doi:${s.doi.toLowerCase()}`, s.arxivId && `arxiv:${s.arxivId}`, `url:${s.url.replace(/\/+$/, '')}`].filter(Boolean) as string[];
+    if (keys.some((k) => seen.has(k))) continue;
+    keys.forEach((k) => seen.add(k));
+    out.push(s);
+  }
+  return out;
+}
 
 const userText = (m: ChatMessage) => m.blocks
   .filter((b): b is { type: 'text'; text: string } => b.type === 'text' && !(b as { meta?: string }).meta)
@@ -45,9 +59,13 @@ export function buildTranscript(messages: ChatMessage[], activity: RunEvent[], s
   const starts = new Map<string, any>();
   const ends = new Map<string, any>();
   const notices = new Map<string, RunEvent[]>();
+  const sources = new Map<string, Source[]>();
   for (const e of activity) {
     if (e.type === 'tool_start') starts.set(e.data.id, e.data);
-    else if (e.type === 'tool_end') ends.set(e.data.id, e.data);
+    else if (e.type === 'tool_end') {
+      ends.set(e.data.id, e.data);
+      if (Array.isArray(e.data.sources)) sources.set(e.runId, [...(sources.get(e.runId) ?? []), ...e.data.sources]);
+    }
     else if (e.type === 'notice' || e.type === 'run_error') {
       const list = notices.get(e.runId) ?? [];
       list.push(e);
@@ -58,6 +76,9 @@ export function buildTranscript(messages: ChatMessage[], activity: RunEvent[], s
   const tools = new Map<string, Extract<Item, { kind: 'tool' }>>();
   const flushNotices = (runId: string | null) => {
     if (!runId) return;
+    const src = sources.get(runId);
+    if (src?.length) items.push({ kind: 'sources', key: `s${runId}`, sources: mergeSources(src) });
+    sources.delete(runId);
     for (const n of notices.get(runId) ?? []) {
       items.push({ kind: 'notice', key: `n${n.id}`, level: n.type === 'run_error' ? 'error' : n.data.level === 'error' ? 'error' : 'warn', message: n.data.message });
     }
@@ -104,6 +125,7 @@ export function buildTranscript(messages: ChatMessage[], activity: RunEvent[], s
 
 export interface LiveState {
   runId: string;
+  sources?: Source[];
   userText: string;
   /** What the composer attached, shown with the pending message until the stored copy loads. */
   userAttachments?: ItemAttachment[];
@@ -129,7 +151,7 @@ export function applyEvent(s: LiveState, e: { id: number; type: string; data: an
     case 'tool_end': {
       const i = items.findIndex((it) => it.kind === 'tool' && it.id === e.data.id);
       if (i >= 0) items[i] = { ...(items[i] as Extract<Item, { kind: 'tool' }>), running: false, ok: !!e.data.ok, summary: e.data.summary, output: e.data.output };
-      return { ...s, items };
+      return { ...s, items, ...(Array.isArray(e.data.sources) ? { sources: mergeSources([...(s.sources ?? []), ...e.data.sources]) } : {}) };
     }
     case 'notice':
     case 'run_error':

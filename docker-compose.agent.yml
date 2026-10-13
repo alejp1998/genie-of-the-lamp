@@ -36,11 +36,26 @@ services:
       AGENT_GATEWAY_PORT: "3300"
       AGENT_DATA_DIR: /data
       TRUST_PROXY: "1"
+      # General web search through the bundled SearXNG; unset to turn it off.
+      SEARXNG_URL: ${SEARXNG_URL-http://searxng:8080}
     volumes:
       - aladine-agent:/data
     networks: [frontend]
-    depends_on: [app]
+    depends_on: [app, searxng]
     init: true
+    restart: unless-stopped
+
+  # Private metasearch for the assistant's web_search (free, no API key, not published).
+  searxng:
+    image: searxng/searxng:latest
+    environment:
+      SEARXNG_SECRET: ${SEARXNG_SECRET:-change-me-to-a-long-random-string}
+      SEARXNG_BASE_URL: http://searxng:8080/
+    volumes:
+      - ./deploy/agent/searxng/settings.yml:/etc/searxng/settings.yml:ro
+    networks: [frontend]
+    cap_drop: [ALL]
+    cap_add: [CHOWN, SETGID, SETUID]
     restart: unless-stopped
 
   front:
