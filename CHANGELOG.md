@@ -7,6 +7,12 @@ All notable changes to Aldine are documented here. The format follows
 ## [Unreleased]
 
 ### Added
+- Agent Gateway (Aladine fork, `agent-gateway/`): a separate service for the
+  in-editor assistant. It checks the Aldine sign-in, acts through `/mcp` with a
+  short-lived token scoped to one project, streams chat runs, keeps chat
+  sessions private by default, and writes an audit log.
+- `HOST` sets the address the server listens on (default `0.0.0.0`), so a
+  development server can stay on `127.0.0.1`.
 - The divider between editor and preview can be dragged with a finger or a
   pen, moved with the arrow keys (Shift for larger steps) and reset with a
   double-click.

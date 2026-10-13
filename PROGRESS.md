@@ -43,14 +43,40 @@ Running dev log for the MVP in `ALDINE_AGENT_FORK_SPEC.md` (task brief:
   New README (Lyrebird-style header), pixel-art genie icon + wordmark in `docs/images/`,
   generator `scripts/branding/make_logo.py`.
 
+- 2026-10-13 — **Plan revised (v2)** after a critical review, in `agent-gateway/DESIGN.md` §2. The main changes:
+  - runs are jobs, streamed over SSE that can resume after a reconnect;
+  - the model gets no write tools;
+  - an accepted patch is rebased by its anchors;
+  - a deterministic mock provider runs the tests;
+  - the work is ordered as vertical slices.
+- 2026-10-13 — **Phase 2, gateway core, done** (`agent-gateway/`, Node 24 TypeScript with no build step, its own lockfile):
+  - **Aldine client.** Identity comes from the forwarded `aldine_session` cookie, and project access from Aldine's own check. A broker mints 1 h project-scoped tokens, reuses them, and revokes them when replaced. Tool calls go over MCP (stateless HTTP, clients cached per token).
+  - **Providers.** Anthropic: adaptive thinking, `effort`, automatic prompt caching, eager tool-input streaming, typed errors. OpenAI-compatible: OpenAI, OpenRouter, vLLM, llama.cpp. A scripted mock.
+  - **Loop.** Read-only tools: `list_files`, `read_file`, `search_project`, `get_compile_status`, `compile`, `list_citations`, `list_labels`.
+    - Every tool input is checked with zod.
+    - Hard caps on steps (12), compiles per run (3), tool time, run time and result size.
+    - Cancelling keeps the stored history valid.
+  - **API.** Sessions, messages, runs, events, cancel and audit. Runs persist their events, and SSE resumes from `Last-Event-ID`. Sessions are private by default; sharing with the project makes them read-only for others. Mutations need `X-Aladine-Request` and a same-origin `Sec-Fetch-Site`.
+  - **Storage.** SQLite through `node:sqlite`, with audit records in a separate `audit.db`.
+  - **Tests.** `npm test` passes **29/29** against a fake Aldine. `npm run test:it` passes **4/4** against a real Aldine dev server with real compiles.
+  - **Live smoke runs** (`npm run smoke`):
+    - **Claude Haiku 5.5:** about 9 s and a correct diagnosis. Prompt caching hit: 8.9 k cached input tokens.
+    - **Local `gpt-oss-20b`** through the OpenAI-compatible path: about 67 s and a correct answer.
+- 2026-10-13 — Core change: optional `HOST` for Aldine's listen address (default unchanged), in the CHANGELOG. Before it, the dev server was reachable on the campus LAN.
+
 ### In progress
-- Phase 2 — Gateway skeleton.
+- Phase 3: the assistant panel (right-hand pane, streaming chat, sessions, context capture), served live on the ZeroTier URL.
 
 ### Blocked
 - Nothing.
 
 ### Next
-- Phase 2 — Gateway skeleton (TS/Fastify, cookie auth, PAT minting, SQLite store, provider adapters, SSE).
+- Phase 3, then Phase 4 (`propose_patch`, Accept / Edit / Reject, the attribution core change).
+
+## Dev environment (this host)
+- Aldine dev server: `~/dev/aladine-devdata/run-aldine.sh`, on `127.0.0.1:3000` with auth and MCP on. Data lives in `~/dev/aladine-devdata/` (outside the repo). Rate limits are relaxed for development.
+- Compiler: the `aladine-dev-compiler` container (`ghcr.io/trahloff/aldine-compiler:0.11.0`, 5 GB), on `127.0.0.1:4020`. It runs as the host user (`--user $(id -u)`) so it can write to the host data directory, with capabilities dropped, a 2 GB memory limit and 256 PIDs.
+- Gateway: `cd agent-gateway && npm run dev`, on `127.0.0.1:3300` under `/agent-gateway`.
 
 ## Reconnaissance notes
 

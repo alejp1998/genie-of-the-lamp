@@ -30,7 +30,7 @@ initProjectEvents({ onAccessChanged: closeProjectConnections });
 
 const app = await buildApp();
 
-await app.listen({ port: config.port, host: '0.0.0.0' });
+await app.listen({ port: config.port, host: process.env.HOST || '0.0.0.0' });
 
 // Yjs collaboration over WebSocket at <basePath>/collab
 const wss = new WebSocketServer({ noServer: true });

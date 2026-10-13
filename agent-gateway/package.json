@@ -11,7 +11,9 @@
     "start": "node --disable-warning=ExperimentalWarning src/index.ts",
     "dev": "node --disable-warning=ExperimentalWarning --env-file-if-exists=.env --watch src/index.ts",
     "typecheck": "tsc --noEmit",
-    "test": "node --disable-warning=ExperimentalWarning --test --test-concurrency=1 'test/**/*.test.ts'"
+    "test": "node --disable-warning=ExperimentalWarning --test --test-concurrency=1 'test/**/*.test.ts'",
+    "test:it": "ALDINE_IT_URL=${ALDINE_IT_URL:-http://127.0.0.1:3000} ALDINE_IT_COMPILE=${ALDINE_IT_COMPILE:-1} node --disable-warning=ExperimentalWarning --test test/integration.aldine.test.ts",
+    "smoke": "node --disable-warning=ExperimentalWarning --env-file=.env scripts/smoke-live.ts"
   },
   "license": "AGPL-3.0-only",
   "dependencies": {
