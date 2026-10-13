@@ -3,7 +3,8 @@
 Running dev log for the MVP in `ALDINE_AGENT_FORK_SPEC.md` (task brief:
 `AGENT_TASK_PROMPT.md`). Updated at the end of every work session.
 
-- **Branch:** `agent-fork/mvp` (forked from upstream `main` @ `a64536f`, Aldine 0.11.0)
+- **Repo:** [github.com/alejp1998/Aladine](https://github.com/alejp1998/Aladine) — work lands on `main`, pushed as we go
+  (`upstream` = `trahloff/Aldine`, forked @ `a64536f`, Aldine 0.11.0)
 - **Live review URL (ZeroTier):** `http://10.211.108.8:8095` — reserved, not serving yet
   (bound to the ZeroTier IP directly, same pattern as `stt` :9000 and `llama-router` :11439 on this host)
 - **Deployment instructions:** `agent-gateway/README.md` (not written yet)
@@ -37,6 +38,10 @@ Running dev log for the MVP in `ALDINE_AGENT_FORK_SPEC.md` (task brief:
 
 - 2026-10-13 — Anthropic key added to `agent-gateway/.env` (git-ignored, mode 600). Default model
   **`claude-haiku-5-5`**; verified streaming + native tool use (`stop_reason: tool_use`).
+
+- 2026-10-13 — Fork published as **Aladine** (`origin` = `alejp1998/Aladine`, `upstream` = `trahloff/Aldine`).
+  New README (Lyrebird-style header), pixel-art genie icon + wordmark in `docs/images/`,
+  generator `scripts/branding/make_logo.py`.
 
 ### In progress
 - Phase 2 — Gateway skeleton.
