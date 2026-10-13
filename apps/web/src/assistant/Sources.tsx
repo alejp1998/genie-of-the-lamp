@@ -1,18 +1,11 @@
 import { useState } from 'react';
 import { IconDoc, IconLink } from '../components/Icons';
 import type { Source } from './api';
+import { authorLine } from './names';
 
 const SHOWN = 4;
 
 const host = (url: string) => { try { return new URL(url).host.replace(/^www\./, ''); } catch { return url; } };
-
-function authors(a?: string[]) {
-  if (!a?.length) return null;
-  const surname = (n: string) => n.split(/\s+/).pop();
-  if (a.length === 1) return surname(a[0]);
-  if (a.length === 2) return `${surname(a[0])} & ${surname(a[1])}`;
-  return `${surname(a[0])} et al.`;
-}
 
 /** The papers and pages an answer drew on, numbered in the order the assistant met them. */
 export default function Sources({ sources, onCite }: { sources: Source[]; onCite?(s: Source): void }) {
@@ -31,7 +24,7 @@ export default function Sources({ sources, onCite }: { sources: Source[]; onCite
               <div className="source__meta">
                 {s.kind === 'paper' ? (
                   <>
-                    {[authors(s.authors), s.venue, s.year].filter(Boolean).join(' · ')}
+                    {[authorLine(s.authors), s.venue, s.year].filter(Boolean).join(' · ')}
                     {typeof s.citedBy === 'number' && <span> · {s.citedBy.toLocaleString()} citation{s.citedBy === 1 ? '' : 's'}</span>}
                     {s.openAccess && <span className="source__oa" title="An open-access copy exists">Open access</span>}
                   </>

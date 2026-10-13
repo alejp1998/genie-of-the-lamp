@@ -85,6 +85,7 @@ All settings are environment variables in `agent-gateway/.env` (see `.env.exampl
 | `AGENT_RESEARCH_EMAIL` | — | Contact address sent to OpenAlex; puts the gateway in its faster "polite pool". |
 | `SEARXNG_URL` | `http://searxng:8080` in the overlay | Your own SearXNG with the JSON format on. Unset: no `web_search`. |
 | `SEARXNG_SECRET` | placeholder | SearXNG's secret key; set a long random string. |
+| `REFFIX_URL` | `http://reffix:8000` in the overlay | The reffix sidecar ([reffix](https://github.com/kasnerz/reffix), MIT; DBLP lookups). Unset: no `check_bibliography`. |
 | `AGENT_FETCH` | on | `0` stops the assistant reading web pages and open-access PDFs. |
 | `OPENALEX_BASE_URL` / `ARXIV_BASE_URL` | public APIs | Alternative endpoints, e.g. a mirror or a test server. |
 
@@ -145,9 +146,10 @@ With research on, it also gets tools that reach outside the project, all free an
 - `search_literature`: OpenAlex (about 250 million works, with venues and citation counts) and arXiv, merged and de-duplicated;
 - `get_paper`: one work by DOI or arXiv id, optionally reading its open-access full text;
 - `web_search`: the general web through the bundled SearXNG (a private metasearch engine; no account, no API key);
-- `fetch_url`: the readable text of a page or online PDF, with any scholarly citation metadata.
+- `fetch_url`: the readable text of a page or online PDF, with any scholarly citation metadata;
+- `check_bibliography`: runs the `.bib` (up to 40 entries per call) through reffix against DBLP, using the bundled sidecar. It reports what would change per entry (completed fields, protected capitalisation, the published version instead of an arXiv preprint), and the assistant proposes the fixes as a normal reviewed diff. Keys never change.
 
-The panel shows what the assistant consulted as numbered source cards, and a paper card has **Cite**. A proposal can carry `add_references`: on Accept, those entries go through Aldine's `references_add`, which looks each DOI or arXiv id up and writes clean BibTeX to the project's `.bib` before the `\cite` lands. The panel's `/factcheck`, `/references` and `/related` commands, and **Check** on a selection, drive these tools.
+The panel shows what the assistant consulted as numbered source cards, and a paper card has **Cite**. A proposal can carry `add_references`. The gateway runs Aldine's `references_add` with `dryRun` to get the exact BibTeX, styled like the target file. That target is the `.bib` the main document loads, followed through `\input`, unless the user names another. The entry becomes part of the diff, and a `\cite{@<DOI>}` in the same proposal becomes the real key, so one Accept adds the entry and its citation together. Works already in the bibliography are reported with their existing key. The panel's `/factcheck`, `/references` and `/related` commands, and **Check** on a selection, drive these tools.
 
 **The model has no write tool.** Its only route to a change is `propose_patch`, which validates quote anchors with Aldine's rules against the current text and stores a proposal with a unified diff.
 

@@ -63,6 +63,8 @@ export interface AgentTool<I = any> {
   summarize(result: any): string;
   /** Papers and pages this result is based on, for the panel's source cards. */
   sources?(result: any): unknown[];
+  /** A longer budget than the default tool timeout, for tools that call slow services. */
+  timeoutMs?: number;
   run(input: I, ctx: ToolContext, call: { id: string }): Promise<unknown>;
 }
 
@@ -343,6 +345,74 @@ const ChangeInput = z.object({
   new_content: z.string().max(200_000).optional().describe('Full content of a NEW file (not for existing files)'),
 }).strict();
 
+const CITE_RE = /\\[A-Za-z]*cite[A-Za-z]*\*?(?:\[[^\]]*\]){0,2}\{([^}]*)\}/g;
+const normId = (id: string) => id.trim().toLowerCase().replace(/^https?:\/\/(dx\.)?doi\.org\//, '').replace(/^doi:/, '').replace(/^arxiv:/, '');
+
+/** The shortest end of a file (from 40 characters) that occurs once in it: the anchor an append edit quotes. */
+export function uniqueTail(content: string): string {
+  const body = content.trimEnd();
+  for (let n = Math.min(40, body.length); n < body.length; n += 40) {
+    const q = body.slice(-n);
+    if (body.indexOf(q) === body.length - n) return q;
+  }
+  return body;
+}
+
+/** "Last, First and Last, First" from a BibTeX author field, for the card. */
+function bibAuthors(entry: string): string[] | undefined {
+  const m = /\bauthor\s*=\s*\{((?:[^{}]|\{[^{}]*\})*)\}/i.exec(entry);
+  return m ? m[1].split(/\s+and\s+/).map((a) => a.replace(/[{}]/g, '').trim()).filter(Boolean).slice(0, 6) : undefined;
+}
+
+type ChangeInput = { path: string; edits?: EditSpec[]; new_content?: string };
+
+/**
+ * Look each reference up without writing (references_add with dryRun) and
+ * turn the new entries into changes to their .bib files. Fills in key,
+ * bibFile and duplicate on the references. An Aldine without dry runs
+ * answers without `entry`: those references are added on Accept as before.
+ */
+async function previewReferences(ctx: ToolContext, references: NonNullable<Proposal['references']>, changedPaths: string[]): Promise<ChangeInput[]> {
+  // Only an Aldine that declares dryRun gets it: an older one would ignore the flag and add the entry now.
+  if (!(await ctx.aldine.toolHasParam(ctx.token, 'references_add', 'dryRun'))) return [];
+  const perFile = new Map<string, { entries: string[]; created: boolean }>();
+  const keys = new Set<string>();
+  for (const r of references) {
+    let res: any;
+    try {
+      res = await ctx.aldine.callTool(ctx.token, 'references_add', { project: ctx.projectId, branch: ctx.branch, query: r.id, dryRun: true, ...(r.bibFile ? { bibFile: r.bibFile } : {}) }, { signal: ctx.signal });
+    } catch (err) {
+      throw new Error(`Could not look ${r.id} up for the bibliography: ${(err as Error).message}`);
+    }
+    if (typeof res?.entry !== 'string') continue;
+    r.key = res.key;
+    r.bibFile = res.bibFile;
+    const authors = bibAuthors(res.entry);
+    if (authors?.length) r.authors = authors;
+    if (res.duplicate || keys.has(`${res.bibFile}\u0000${res.key}`)) { r.duplicate = true; continue; }
+    keys.add(`${res.bibFile}\u0000${res.key}`);
+    if (changedPaths.includes(res.bibFile)) throw new Error(`${res.bibFile} is both edited and receiving add_references; leave the new entries to add_references and drop that change.`);
+    const f = perFile.get(res.bibFile) ?? { entries: [], created: !!res.created };
+    f.entries.push(String(res.entry).trim());
+    perFile.set(res.bibFile, f);
+    r.inDiff = true;
+  }
+  const out: ChangeInput[] = [];
+  for (const [path, f] of perFile) {
+    const block = f.entries.join('\n\n');
+    if (f.created) { out.push({ path, new_content: `${block}\n` }); continue; }
+    const cur = await readFresh(ctx, path);
+    if (!cur.content.trim()) { out.push({ path, edits: undefined, new_content: undefined }); continue; }
+    const tail = uniqueTail(cur.content);
+    out.push({ path, edits: [{ quote: tail, replacement: `${tail}\n\n${block}` }] });
+  }
+  // An existing but empty .bib has nothing to anchor an edit to; its references fall back to Accept.
+  for (const c of out.filter((x) => !x.edits && x.new_content === undefined)) {
+    for (const r of references) if (r.bibFile === c.path) r.inDiff = false;
+  }
+  return out.filter((x) => x.edits || x.new_content !== undefined);
+}
+
 export const proposePatch = tool({
   name: 'propose_patch',
   description: 'Propose changes to the project for the user to review. Nothing is written: the user sees a diff and chooses Accept, Edit or Reject. Edit existing files with quote/replacement pairs that quote the current text exactly (read the file first); create a new file with new_content. Group related changes into one proposal with a one-line summary. To answer review comments, list them in `resolves` with the reply to post: on Accept each gets the reply and is resolved (changes may be empty for a reply-only answer). When working through several items one at a time, set continue_after_review so you are resumed after the user decides. After proposing, stop and tell the user in one or two sentences what you proposed and why.',
@@ -351,8 +421,8 @@ export const proposePatch = tool({
     changes: z.array(ChangeInput).max(10),
     add_references: z.array(z.object({
       id: z.string().min(3).max(300).describe('DOI (10.xxxx/…) or arXiv id of a work you found with search_literature or get_paper'),
-      bib_file: z.string().max(500).optional().describe('Target .bib; default: the project\'s references.bib'),
-    }).strict()).max(10).optional().describe('Add these works to the bibliography on Accept (BibTeX is generated from the DOI/arXiv record, never typed). The \\cite keys are reported after acceptance; cite them in a follow-up proposal.'),
+      bib_file: z.string().max(500).optional().describe('Target .bib. Leave it out unless the user names one: the default is the .bib the main document loads.'),
+    }).strict()).max(10).optional().describe('Add these works to the bibliography. The BibTeX is generated from the DOI/arXiv record (never typed) when you propose, and the user reviews it as part of the diff; works already in the .bib are reported with their existing key. To cite one in this same proposal, put its id after an @ in the \\cite braces, e.g. \\cite{@10.1145/3610978.3640723}: it becomes the real key.'),
     resolves: z.array(z.object({
       comment_id: z.string().min(1).max(100),
       reply: z.string().min(1).max(2000).describe('Posted on the thread when the user accepts, e.g. what changed and why'),
@@ -379,6 +449,22 @@ export const proposePatch = tool({
         references.push({ id: r.id, ...meta, ...(r.bib_file ? { bibFile: r.bib_file } : {}) });
       }
     }
+    // The BibTeX each reference adds, looked up now (Aldine's dry run) so the user reviews the exact
+    // lines: they become an ordinary edit to the .bib, applied on Accept with everything else.
+    const bibChanges = references?.length ? await previewReferences(ctx, references, input.changes.map((c) => c.path)) : [];
+    // \cite{@<id>} in the same proposal: the id of a work being added, replaced with its key.
+    const keyOf = new Map((references ?? []).filter((r) => r.key).map((r) => [normId(r.id), r.key!]));
+    const citeKeys = (text: string) => text.replace(CITE_RE, (whole, keys: string) => whole.replace(`{${keys}}`, `{${keys.split(',').map((k) => {
+      const t = k.trim();
+      if (!t.startsWith('@')) return k;
+      const key = keyOf.get(normId(t.slice(1)));
+      if (!key) throw new Error(`\\cite{${t}} names no work in add_references${keyOf.size ? '' : ' (this Aldine reports keys only after Accept: cite in a follow-up proposal)'}.`);
+      return k.replace(t, key);
+    }).join(',')}}`));
+    for (const c of input.changes) {
+      if (c.new_content !== undefined) c.new_content = citeKeys(c.new_content);
+      for (const e of c.edits ?? []) e.replacement = citeKeys(e.replacement);
+    }
     let resolves: Proposal['resolves'];
     if (input.resolves?.length) {
       const all = await ctx.aldine.listComments(ctx.token, ctx.projectId, ctx.branch);
@@ -396,7 +482,7 @@ export const proposePatch = tool({
     let head: string | null = null;
     let added = 0;
     let removed = 0;
-    for (const c of input.changes) {
+    for (const c of [...input.changes, ...bibChanges]) {
       if (!PATH_OK(c.path)) throw new Error(`"${c.path}" is not a valid project path (relative, no "..", no hidden segments).`);
       if (seen.has(c.path)) throw new Error(`${c.path} appears twice; put all its edits in one change.`);
       seen.add(c.path);
@@ -432,7 +518,7 @@ export const proposePatch = tool({
       status: 'awaiting_review',
       files: changes.map((c) => c.path),
       ...(resolves?.length ? { resolves_comments: resolves.map((r) => r.commentId) } : {}),
-      ...(references?.length ? { references: references.map((r) => ({ id: r.id, title: r.title })) } : {}),
+      ...(references?.length ? { references: references.map((r) => ({ id: r.id, title: r.title, ...(r.key ? { key: r.key, bib_file: r.bibFile } : {}), ...(r.duplicate ? { already_in_bibliography: true } : {}) })) } : {}),
       added,
       removed,
       ...(draft.replaced?.length ? { replaced: draft.replaced.map((id) => id.slice(0, 8)) } : {}),

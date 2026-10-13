@@ -153,6 +153,16 @@ Running dev log for the MVP in `ALDINE_AGENT_FORK_SPEC.md` (task brief:
 - 2026-10-13 — **Paste from the editor:** copies and cuts in CodeMirror are remembered with file and lines (`assistant/editorClipboard.ts`), and pasting the same text into the chat box adds a `file:lines` chip. Text without a newline and under 30 characters, and text from elsewhere, paste as usual.
 - 2026-10-13 — **Pinned bars:** the file-tree action bar is sticky at the bottom with tighter padding (and the new-file input takes its place); History's checkpoint bar is sticky at the top. Assistant e2e 13/13; upstream file-tree/history specs 42/42.
 
+- 2026-10-13 — **References you can review:**
+  - `references_add` gains `dryRun` (Aldine), and the default `.bib` follows the root file's `\input` chain to the file it loads (the largest one, so `IEEEabrv.bib` is skipped);
+  - new entries match the file's indent and field-name case;
+  - proposals carry the BibTeX as a `.bib` edit, and `\cite{@<id>}` in the same proposal becomes the key, so one Accept commits both;
+  - author surnames come from BibTeX ("De Cubber");
+  - an older Aldine (no `dryRun` in its schema) keeps the old add-on-Accept path.
+- 2026-10-13 — **reffix:** `deploy/agent/reffix/` (python:3.12-slim, `reffix==1.3.2`, a stdlib HTTP wrapper, one run at a time), `check_bibliography` in the gateway (up to 40 entries per call, field-level changes per entry, DBLP problems listed), `/bibcheck`.
+  - DBLP currently throttles this host (HTTP 202/429), so live matching is not verified here; the tool reports those entries as not verified.
+  - Gateway 68/68, web 83/83, MCP suite passes.
+
 ### In progress
 - Nothing.
 

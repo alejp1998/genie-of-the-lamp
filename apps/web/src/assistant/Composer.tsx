@@ -16,7 +16,8 @@ const MAX_PDFS = 3;
 const PASTE_CHARS = 1500;
 const PASTE_LINES = 30;
 
-export const SLASH_COMMANDS: { name: string; hint: string; prompt: string }[] = [
+export const SLASH_COMMANDS: { name: string; hint: string; prompt: string; needs?: 'bibliography' }[] = [
+  { name: 'bibcheck', hint: 'Check the bibliography against DBLP with reffix', prompt: 'Check the bibliography with check_bibliography (reffix, DBLP). Summarize what it would fix per entry, then propose the fixes as one proposal on the .bib. List entries it could not verify.', needs: 'bibliography' },
   { name: 'explain', hint: 'Explain the selection or the code at the cursor', prompt: 'Explain the selected text (or the LaTeX around my cursor) in plain words.' },
   { name: 'fix', hint: 'Find why the build fails and propose a fix', prompt: 'The document does not compile. Find the cause and propose the smallest fix.' },
   { name: 'improve', hint: 'Better wording, same meaning and citations', prompt: 'Improve the wording of the selected text without changing its meaning, claims, citations or labels. Propose it as a change.' },
@@ -103,7 +104,7 @@ const Composer = forwardRef<ComposerHandle, Props>(function Composer({ config, c
   const options = useMemo(() => {
     if (!menu) return [];
     const q = menu.query.toLowerCase();
-    if (menu.kind === 'slash') return SLASH_COMMANDS.filter((c) => c.name.startsWith(q)).map((c) => ({ id: c.name, label: `/${c.name}`, hint: c.hint }));
+    if (menu.kind === 'slash') return SLASH_COMMANDS.filter((c) => c.name.startsWith(q) && (!c.needs || config.research?.[c.needs])).map((c) => ({ id: c.name, label: `/${c.name}`, hint: c.hint }));
     const scored = files
       .map((f) => ({ f, i: f.toLowerCase().indexOf(q), base: f.toLowerCase().split('/').pop()!.startsWith(q) }))
       .filter((x) => !q || x.i >= 0)

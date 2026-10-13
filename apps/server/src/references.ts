@@ -1,7 +1,9 @@
 import * as store from './store.js';
 import { ensureWorktree, checkpointPathsHeld, withRepoLock } from './gitops.js';
 import { flushBranchDocs, refreshBranchDocsFromDisk, scheduleCommit, commitAgentWrite } from './collab.js';
+import path from 'node:path';
 import { bibKeys } from './bib.js';
+import { rootSiblingPath } from './util.js';
 
 /**
  * Resolve a DOI, doi.org URL, or arXiv id to a BibTeX entry using free public
@@ -345,6 +347,101 @@ function entryWithSameIdentifier(source: string, entry: string): string | null {
 /** `created`: the .bib did not exist before this call (folders included). */
 export interface AddedReference { key: string; bibFile: string; duplicate: boolean; created: boolean }
 
+/** What adding would do, without writing: the entry exactly as it would be appended. */
+export interface ReferencePreview extends AddedReference { entry: string }
+
+/**
+ * Lay a new entry out like the file it joins: the existing entries' field
+ * indent (tab, two or four spaces) and field-name case (title / TITLE).
+ */
+export function matchBibStyle(entry: string, existing: string | null): string {
+  if (!existing) return entry;
+  const field = /^([ \t]+)([A-Za-z]+)\s*=/m.exec(existing);
+  if (!field) return entry;
+  const [, indent, name] = field;
+  const upper = name.length > 1 && name === name.toUpperCase();
+  return entry.replace(/^ {2}([a-z]+)(\s*=)/gm, (_, n: string, eq: string) => `${indent}${upper ? n.toUpperCase() : n}${eq}`);
+}
+
+/** Dedupe a looked-up entry against the file: same key, or the same DOI / eprint under another key. */
+function planEntry(entry: string, existing: string | null) {
+  const key = [...bibKeys(entry)][0] ?? '';
+  const present = key && bibKeys(existing ?? '').has(key) ? key : entryWithSameIdentifier(existing ?? '', entry);
+  return { key: present || key, duplicate: !!present, entry: matchBibStyle(entry.trim(), existing) };
+}
+
+const BIB_LOAD_RE = /\\(?:addbibresource|addglobalbib|bibliography)\s*(?:\[[^\]]*\])?\s*\{([^}]*)\}/g;
+const INPUT_RE = /\\(?:input|include|subfile)\s*\{([^}]+)\}/g;
+const stripComments = (tex: string) => tex.replace(/(^|[^\\])%.*$/gm, '$1');
+
+/**
+ * Where a new reference goes when the caller names no file: the .bib the
+ * compiled document loads. It follows the root file through \input /
+ * \include / \subfile, so a sibling variant (main_blind.tex loading
+ * references_blind.bib) does not count; among several loaded files the one
+ * with the most entries wins, so an abbreviations file such as IEEEabrv.bib
+ * is passed over. When the root names none, any .tex that loads a .bib;
+ * else references.bib beside the root file.
+ */
+export function defaultBibFile(projectId: string, branch: string, rootFile: string): string {
+  const files = store.listFiles(projectId, branch).filter((f) => f.type === 'file');
+  const paths = new Set(files.map((f) => f.path));
+  const bibs = new Set(files.filter((f) => /\.bib$/i.test(f.path)).map((f) => f.path));
+  const rootDir = path.posix.dirname(rootFile || 'main.tex');
+  const read = (p: string) => { try { return stripComments(store.readFile(projectId, branch, p).toString('utf8')); } catch { return null; } };
+  const loadsOf = (texFiles: string[]) => {
+    const loaded: string[] = [];
+    for (const f of texFiles) {
+      const text = read(f);
+      if (text === null) continue;
+      for (const m of text.matchAll(BIB_LOAD_RE)) {
+        for (const raw of m[1].split(',')) {
+          const name = raw.trim();
+          if (!name) continue;
+          const withExt = /\.bib$/i.test(name) ? name : `${name}.bib`;
+          for (const dir of [rootDir, path.posix.dirname(f)]) {
+            const p = path.posix.normalize(path.posix.join(dir, withExt));
+            if (bibs.has(p) && !loaded.includes(p)) loaded.push(p);
+          }
+        }
+      }
+    }
+    return loaded;
+  };
+  // The files the root pulls in, transitively (paths resolve against the root's directory, as TeX reads them).
+  const compiled: string[] = [];
+  const queue = rootFile && paths.has(rootFile) ? [rootFile] : [];
+  while (queue.length && compiled.length < 200) {
+    const f = queue.shift()!;
+    if (compiled.includes(f)) continue;
+    compiled.push(f);
+    const text = read(f) ?? '';
+    for (const m of text.matchAll(INPUT_RE)) {
+      const name = m[1].trim();
+      for (const cand of [name, `${name}.tex`]) {
+        const p = path.posix.normalize(path.posix.join(rootDir, cand));
+        if (paths.has(p) && /\.tex$/i.test(p)) { queue.push(p); break; }
+      }
+    }
+  }
+  let loaded = loadsOf(compiled);
+  if (!loaded.length) loaded = loadsOf(files.filter((f) => /\.tex$/i.test(f.path)).map((f) => f.path));
+  const entries = (p: string) => bibKeys(read(p) ?? '').size;
+  const best = loaded.map((p) => ({ p, n: entries(p) })).sort((a, b) => b.n - a.n)[0];
+  return best ? best.p : rootSiblingPath(rootFile, 'references.bib');
+}
+
+/** Look a query up and report what `addReference` would append, writing nothing. */
+export async function previewReference(projectId: string, branch: string, query: string, bibFile: string): Promise<ReferencePreview | null> {
+  const entry = await fetchBibEntry(query.trim());
+  if (!entry) return null;
+  await ensureWorktree(projectId, branch);
+  let existing: string | null = null;
+  try { existing = store.readFile(projectId, branch, bibFile).toString('utf8'); } catch { /* new file */ }
+  const plan = planEntry(entry, existing);
+  return { ...plan, bibFile, created: existing === null };
+}
+
 /**
  * Look a query up and append the entry to `bibFile` on the branch (created
  * if missing), skipping a key that is already there. Shared by the REST
@@ -370,10 +467,10 @@ export async function addReference(projectId: string, branch: string, query: str
     // /bib index: skips @comment/@string) and on the DOI / eprint, which
     // finds the same paper under an older key style; the existing key is
     // reported so the caller cites that one.
-    const key = [...bibKeys(entry)][0] ?? '';
-    const present = key && bibKeys(existing ?? '').has(key) ? key : entryWithSameIdentifier(existing ?? '', entry);
-    if (present) return { key: present, bibFile, duplicate: true, created: false, before, after: existing ?? '' };
-    const after = (existing ?? '').trimEnd() + '\n\n' + entry.trim() + '\n';
+    const plan = planEntry(entry, existing);
+    const key = plan.key;
+    if (plan.duplicate) return { key, bibFile, duplicate: true, created: false, before, after: existing ?? '' };
+    const after = (existing ?? '').trimEnd() + '\n\n' + plan.entry + '\n';
     beforeWrite?.();
     store.writeFile(projectId, branch, bibFile, after);
     refreshBranchDocsFromDisk(projectId, branch, [bibFile]);

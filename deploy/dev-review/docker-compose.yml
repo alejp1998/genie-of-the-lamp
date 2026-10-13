@@ -67,11 +67,21 @@ services:
       LOCAL_LLM_BASE_URL: ${LOCAL_LLM_BASE_URL:-http://10.211.108.8:11439/v1}
       LOCAL_LLM_MODEL: ${LOCAL_LLM_MODEL:-gpt-oss-20b}
       SEARXNG_URL: http://searxng:8080
+      REFFIX_URL: http://reffix:8000
     volumes:
       - ../..:/repo
       - ${DEVDATA:?set DEVDATA}:/devdata
     networks: [review, egress]
     init: true
+    restart: unless-stopped
+
+  reffix:
+    build: ../agent/reffix
+    image: genie-reffix:local
+    networks: [review, egress]
+    read_only: true
+    tmpfs: [/tmp]
+    cap_drop: [ALL]
     restart: unless-stopped
 
   searxng:

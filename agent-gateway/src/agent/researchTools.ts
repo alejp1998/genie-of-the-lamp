@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { FetchError, htmlToText, pdfToText, safeFetch } from '../research/net.ts';
 import { arxivById, openAlexByDoi, type ResearchConfig, searchLiterature, webSearch, type Work } from '../research/sources.ts';
 import type { AgentTool, ToolContext } from './tools.ts';
+import { checkBibliographyTool } from './bibCheck.ts';
 
 /** What the panel shows as a source card. */
 export interface Source {
@@ -171,5 +172,5 @@ export const fetchUrlTool: AgentTool = {
 
 export function researchTools(cfg: ResearchConfig): AgentTool[] {
   if (!cfg.enabled) return [];
-  return [searchLiteratureTool, getPaperTool, ...(cfg.searxngUrl ? [webSearchTool] : []), ...(cfg.fetchEnabled ? [fetchUrlTool] : [])];
+  return [searchLiteratureTool, getPaperTool, ...(cfg.searxngUrl ? [webSearchTool] : []), ...(cfg.fetchEnabled ? [fetchUrlTool] : []), ...(cfg.reffixUrl ? [checkBibliographyTool(cfg)] : [])];
 }

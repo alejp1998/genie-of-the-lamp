@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { authorLine } from './names';
 import DiffView from '../components/DiffView';
 import WordDiffView from '../components/WordDiffView';
 import { openVirtualDoc } from '../components/VirtualDocs';
@@ -93,7 +94,7 @@ export default function ProposalCard({ proposal: p, canDecide, onAccept, onRejec
             <div key={r.id} className="proposal__ref" data-testid="proposal-reference">
               <a href={/^10\./.test(r.id) ? `https://doi.org/${r.id}` : `https://arxiv.org/abs/${r.id.replace(/^arxiv:/i, '')}`} target="_blank" rel="noreferrer noopener" className="proposal__ref-title">{r.title ?? r.id}</a>
               <span className="proposal__ref-meta">
-                {[r.authors?.length ? (r.authors.length > 2 ? `${r.authors[0].split(' ').pop()} et al.` : r.authors.map((x) => x.split(' ').pop()).join(' & ')) : null, r.venue, r.year].filter(Boolean).join(' · ')}
+                {[authorLine(r.authors), r.venue, r.year].filter(Boolean).join(' · ')}
                 {r.key && <> · <code className="md__code">\cite&#123;{r.key}&#125;</code>{r.duplicate ? ' (already there)' : ''}</>}
                 {r.error && <span className="proposal__err"> · {r.error}</span>}
               </span>

@@ -14,9 +14,9 @@ import {
   commitAgentWrite, applySuggestionToDoc, openDocContent, markAgentPresence, signalAgentWrite, AGENT_ORIGIN,
 } from '../collab.js';
 import { compileGate, compileLimiter, agentCompileGate, refLimiter } from '../ratelimit.js';
-import { looksBinary, rootSiblingPath, cleanCommitMessage, COMMIT_MESSAGE_MAX } from '../util.js';
+import { looksBinary, cleanCommitMessage, COMMIT_MESSAGE_MAX } from '../util.js';
 import { isListed, isOwner } from '../authz.js';
-import { addReference } from '../references.js';
+import { addReference, defaultBibFile, previewReference } from '../references.js';
 import { bibIndex, labelIndex, wordCount } from '../indexes.js';
 import { adoptRootIfUnset } from '../root.js';
 import { listAllTemplates, resolveTemplateSeed, type TemplateSeed } from '../templates.js';
@@ -977,22 +977,34 @@ export function registerTools(server: McpServer, identity: McpIdentity, ctx: Too
       project: projectParam,
       branch: branchParam,
       query: z.string().min(1).describe('A DOI (10.xxxx/…), doi.org URL, arXiv id (2301.12345 or arXiv:2301.12345), or OpenAlex id (W…).'),
-      bibFile: z.string().optional().describe('Target .bib path relative to the project root. Defaults to references.bib beside the root file; a missing file (and its folders) is created.'),
+      bibFile: z.string().optional().describe('Target .bib path relative to the project root. Defaults to the .bib the document loads (the largest, when several), else references.bib beside the root file; a missing file (and its folders) is created.'),
+      dryRun: z.boolean().optional().describe('Look the work up and return the entry exactly as it would be appended ({key, bibFile, duplicate, created, entry}), writing nothing. For showing the user the BibTeX before it is added.'),
     },
-  }, async ({ project, branch = 'main', query, bibFile }) => {
+  }, async ({ project, branch = 'main', query, bibFile, dryRun }) => {
     try {
       const meta = await resolveProject(identity, project);
       assertWritableProject(meta.id);
       // A wrong target would splice an @entry into a .tex source, which the
       // tool would then report as a success (and commit under Claude's name).
-      const visible = visiblePath(bibFile || rootSiblingPath(meta.rootFile, 'references.bib'));
-      if (!/\.bib$/i.test(visible)) return fail('bibFile must be a .bib file');
-      // Branch and path are validated before the budget token is spent and
-      // the upstream is hit, so a typo never costs a lookup.
       await gitops.ensureWorktree(meta.id, branch);
+      const visible = visiblePath(bibFile || defaultBibFile(meta.id, branch, meta.rootFile));
+      if (!/\.bib$/i.test(visible)) return fail('bibFile must be a .bib file');
+      // Branch and path are validated (above) before the budget token is spent
+      // and the upstream is hit, so a typo never costs a lookup.
       const target = diskSpelling(meta.id, branch, visible);
       const key = compileKey(identity);
       if (!(await refLimiter.take(key))) return fail('Reference lookup budget reached — wait a few seconds before the next lookup');
+      if (dryRun) {
+        let preview: Awaited<ReturnType<typeof previewReference>>;
+        try { preview = await previewReference(meta.id, branch, query, target); } catch (err) {
+          const msg = err instanceof Error ? err.message : '';
+          if (/lookup failed|too large|HTTP/i.test(msg)) return fail(`Reference lookup failed: ${msg}`);
+          if (err instanceof TypeError || /fetch failed|abort|timed? ?out|ECONN|ENOTFOUND|EAI_AGAIN/i.test(msg)) return fail('The reference service (doi.org / arXiv / OpenAlex) could not be reached from your Aldine server');
+          return toolError(err);
+        }
+        if (!preview) return fail(`No reference found for "${query}" — pass a DOI (10.…), arXiv id or OpenAlex id`);
+        return ok({ ...preview, dryRun: true, fileVersion: preview.created ? null : fileVersion(meta.id, branch, preview.bibFile) });
+      }
       let added: Awaited<ReturnType<typeof addReference>>;
       try {
         // Right before the write, like every write tool: the tint on the
@@ -1021,7 +1033,7 @@ export function registerTools(server: McpServer, identity: McpIdentity, ctx: Too
   });
 
   server.registerTool('list_citations', {
-    description: 'Citation keys defined in the project\'s .bib files: [{key, title, author, year, file}]. Always call it before writing a \\cite — never invent a key. A key you need that is missing: add it with references_add, or ask the user.',
+    description: 'Citation keys defined in the project\'s .bib files: [{key, title, author, year, file}], plus defaultBibFile: the .bib the main document loads (where references_add writes by default). Always call it before writing a \\cite — never invent a key. A key you need that is missing: add it with references_add, or ask the user.',
     annotations: { readOnlyHint: true },
     inputSchema: { project: projectParam, branch: branchParam },
   }, async ({ project, branch = 'main' }) => {
@@ -1029,7 +1041,7 @@ export function registerTools(server: McpServer, identity: McpIdentity, ctx: Too
       const meta = await resolveProject(identity, project);
       await gitops.ensureWorktree(meta.id, branch);
       const citations = bibIndex(meta.id, branch).map((e) => ({ key: e.key, title: e.title, author: e.author, year: e.year, file: e.file }));
-      return ok({ citations, ...(await echo(meta.id, branch)) });
+      return ok({ citations, defaultBibFile: defaultBibFile(meta.id, branch, meta.rootFile), ...(await echo(meta.id, branch)) });
     } catch (err) { return toolError(err, { project, branch }); }
   });
 

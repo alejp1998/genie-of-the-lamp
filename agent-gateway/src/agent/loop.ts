@@ -76,7 +76,7 @@ async function executeCall(call: Extract<Block, { type: 'tool_call' }>, d: LoopD
   const started = Date.now();
   try {
     if (d.signal.aborted) throw Object.assign(new Error('cancelled'), { name: 'AbortError' });
-    const result = await withTimeout(tool.run(parsed.data, d.toolCtx, { id: call.id }), d.limits.toolTimeoutMs, tool.name);
+    const result = await withTimeout(tool.run(parsed.data, d.toolCtx, { id: call.id }), tool.timeoutMs ?? d.limits.toolTimeoutMs, tool.name);
     const media = isMediaResult(result) ? result : null;
     const content = media ? media.text : clip(JSON.stringify(result), d.limits.maxToolResultChars);
     const durationMs = Date.now() - started;

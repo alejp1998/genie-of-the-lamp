@@ -33,6 +33,15 @@ All notable changes to Aldine are documented here. The format follows
   preview, switched from the panel header or the settings. The file tree
   drops its "Drop files here" box: files dropped anywhere on the panel upload,
   with a faint tint while they hover.
+- References (Genie of the Lamp fork): an `add_references` proposal shows the exact BibTeX lines it adds,
+  styled like the target file, and can cite the new work in the same
+  proposal (`\cite{@<DOI>}`). One Accept writes both. Aldine's
+  `references_add` gains `dryRun`, and by default it writes to the `.bib`
+  the main document loads (following `\input`, skipping abbreviation files)
+  instead of always `references.bib`. `list_citations` reports that file.
+- Bibliography check (Genie of the Lamp fork): `check_bibliography` and `/bibcheck` run the `.bib`
+  through reffix (DBLP) in a bundled sidecar and propose the fixes as a
+  reviewed diff.
 - Text copied or cut in the editor pastes into the assistant's box as a
   `file:lines` reference chip, like an attached selection (Genie of the Lamp fork). Short inline
   bits and text from elsewhere paste as usual.

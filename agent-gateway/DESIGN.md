@@ -179,6 +179,7 @@ agent-gateway/
 | `view_image` | read (image to the model) |
 | `search_literature`, `get_paper` | external read: OpenAlex, arXiv, open-access full text |
 | `web_search`, `fetch_url` | external read: bundled SearXNG; public http(s) pages and PDFs (SSRF-guarded) |
+| `check_bibliography` | external read: the .bib through the reffix sidecar (DBLP); reports per-entry fixes |
 | `propose_patch` | stores a proposal: edits, new files, comment answers, `continue_after_review` |
 
 No write tool reaches the model; writes happen only on a person's Accept.

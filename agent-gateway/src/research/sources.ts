@@ -29,6 +29,8 @@ export interface ResearchConfig {
   /** SearXNG instance with the JSON format enabled; null = no general web search. */
   searxngUrl: string | null;
   fetchEnabled: boolean;
+  /** The reffix sidecar (check_bibliography); null = no such tool. */
+  reffixUrl?: string | null;
   /** Tests only. */
   allowPrivate?: boolean;
 }

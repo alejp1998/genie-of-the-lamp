@@ -313,3 +313,54 @@ test('add_references: listed on the card, added through Aldine on Accept, keys r
   const { decisionsNote } = await import('../src/patches/apply.ts');
   assert.match(decisionsNote([res.proposal])!, /References: \\cite\{ref1\} = 10\.1186\/s41018-018-0045-4; fail failed \(lookup failed\)/);
 });
+
+test('add_references with a current Aldine: the BibTeX is part of the diff and lands on Accept without a second lookup', async () => {
+  aldine.refsAdded = [];
+  aldine.referenceDryRun = true;
+  const before = aldine.files['refs.bib'];
+  try {
+    const { proposal } = await propose({
+      summary: 'Add and cite a reference',
+      changes: [{ path: 'intro.tex', edits: [{ quote: 'Swarm robotics is a field of study.', replacement: 'Swarm robotics is a field of study~\\cite{knuth84,@https://doi.org/10.54941/AHFE1007683}.' }] }],
+      add_references: [{ id: '10.54941/ahfe1007683' }, { id: '10.1/known' }],
+    });
+    assert.match(proposal.diff, /^\+.*field of study~\\cite\{knuth84,ref7683\}\.$/m, 'the @id placeholder became the key in the same proposal');
+    assert.match(proposal.diff, /^\+@article\{ref7683,$/m, 'the new entry is in the diff');
+    assert.match(proposal.diff, /^\+  author = \{De Cubber, Geert and Doroftei, Daniela\},$/m);
+    assert.ok(proposal.added >= 5);
+    const [added, known] = proposal.references!;
+    assert.equal(added.key, 'ref7683');
+    assert.equal(added.inDiff, true);
+    assert.equal(added.bibFile, 'refs.bib');
+    assert.equal(added.authors![0], 'De Cubber, Geert', 'surnames come from the BibTeX, not split display names');
+    assert.equal(known.duplicate, true, 'an entry already in the .bib is reported, not added again');
+    assert.equal(known.key, 'knuth84');
+    assert.equal(aldine.files['refs.bib'], before, 'nothing is written before Accept');
+    const res = await j(await fetch(`${gw}/proposals/${proposal.id}/accept`, as('alice', { method: 'POST', body: '{}' })));
+    assert.equal(res.proposal.status, 'applied');
+    assert.deepEqual(aldine.refsAdded, [], 'Accept writes the reviewed lines; it does not look the work up again');
+    assert.ok(aldine.files['refs.bib'].startsWith(before.trimEnd()) && aldine.files['refs.bib'].includes('@article{ref7683,'));
+    assert.match(aldine.files['intro.tex'], /\\cite\{knuth84,ref7683\}/);
+    assert.equal(aldine.commits.at(-1)!.files.sort().join(','), 'intro.tex,refs.bib', 'one commit carries the entry and the citation');
+    assert.equal(aldine.files['refs.bib'].match(/@book\{knuth84/g)!.length, 1);
+  } finally {
+    aldine.referenceDryRun = false;
+    aldine.files['refs.bib'] = before;
+    aldine.files['intro.tex'] = FILES['intro.tex'];
+  }
+  // A placeholder for a work that is not being added is refused.
+  aldine.referenceDryRun = true;
+  try {
+    const { sse } = await propose({ summary: 'Cite', changes: [{ path: 'intro.tex', edits: [{ quote: 'Swarm robotics is a field of study.', replacement: 'Swarm robotics~\\cite{@10.9/none}.' }] }], add_references: [{ id: '10.54941/ahfe1007683' }] });
+    assert.match(sse, /names no work in add_references/);
+  } finally { aldine.referenceDryRun = false; }
+});
+
+test('uniqueTail picks the shortest unique end of a file', async () => {
+  const { uniqueTail } = await import('../src/agent/tools.ts');
+  const entry = '@misc{a,\n  title = {Same},\n}\n';
+  const content = entry + '\n' + entry.replace('{a,', '{b,') + '\n' + entry;
+  const tail = uniqueTail(content);
+  assert.equal(content.indexOf(tail), content.trimEnd().length - tail.length);
+  assert.equal(content.split(tail).length, 2);
+});

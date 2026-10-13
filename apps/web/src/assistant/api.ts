@@ -99,7 +99,7 @@ export interface GatewayConfig {
   models: { id: string; label: string; provider: string }[];
   defaultModel: string;
   limits: { maxMessageChars: number };
-  research?: { literature: boolean; web: boolean; fetch: boolean };
+  research?: { literature: boolean; web: boolean; fetch: boolean; bibliography?: boolean };
 }
 
 /** A paper or page an answer is based on. */

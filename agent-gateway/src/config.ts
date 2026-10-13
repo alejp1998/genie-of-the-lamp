@@ -148,6 +148,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       openalexBase: (env.OPENALEX_BASE_URL || 'https://api.openalex.org').replace(/\/+$/, ''),
       arxivBase: (env.ARXIV_BASE_URL || 'https://export.arxiv.org/api').replace(/\/+$/, ''),
       searxngUrl: env.SEARXNG_URL || null,
+      reffixUrl: env.REFFIX_URL || null,
       fetchEnabled: env.AGENT_FETCH !== '0',
       allowPrivate: env.AGENT_RESEARCH_ALLOW_PRIVATE === '1',
     },

@@ -163,6 +163,19 @@ export class HttpAldine implements AldineApi {
     try { return JSON.parse(text); } catch { return text; }
   }
 
+  /** Tool name → declared parameters, read once per process (the same server answers every token). */
+  private toolParams: Promise<Map<string, Set<string>>> | null = null;
+
+  async toolHasParam(token: string, name: string, param: string): Promise<boolean> {
+    this.toolParams ??= (async () => {
+      const client = await this.client(token);
+      const { tools } = await client.listTools();
+      return new Map(tools.map((t) => [t.name, new Set(Object.keys((t.inputSchema as { properties?: object })?.properties ?? {}))]));
+    })();
+    this.toolParams.catch(() => { this.toolParams = null; });
+    try { return (await this.toolParams).get(name)?.has(param) ?? false; } catch { return false; }
+  }
+
   async listComments(token: string, projectId: string, branch: string): Promise<ReviewComment[]> {
     const res = await this.rest(`/api/projects/${encodeURIComponent(projectId)}/comments?branch=${encodeURIComponent(branch)}`, { token });
     if (!res.ok) throw new Error(`Aldine comments answered ${res.status}`);

@@ -110,6 +110,13 @@ export class FakeAldine implements AldineApi {
       }
       case 'references_add': {
         const q = String(args.query);
+        if (args.dryRun && this.referenceDryRun) {
+          if (q === 'fail') throw new AldineToolError('lookup failed');
+          const bibFile = String(args.bibFile ?? 'refs.bib');
+          const key = q === '10.1/known' ? 'knuth84' : `ref${q.replace(/\W+/g, '').slice(-4)}`;
+          const existing = this.files[bibFile];
+          return { dryRun: true, key, bibFile, duplicate: !!existing?.includes(`{${key},`), created: existing === undefined, entry: `@article{${key},\n  title  = {Paper ${q}},\n  author = {De Cubber, Geert and Doroftei, Daniela},\n  year   = {2026},\n}`, ...head };
+        }
         this.refsAdded.push(q);
         if (q === 'fail') throw new AldineToolError('lookup failed');
         return { key: `ref${this.refsAdded.length}`, bibFile: args.bibFile ?? 'refs.bib', duplicate: false, created: false, ...head };
@@ -129,6 +136,8 @@ export class FakeAldine implements AldineApi {
 
   comments: any[] = [];
   refsAdded: string[] = [];
+  /** Answer references_add's dryRun like a current Aldine (off: an older one, which ignores the flag). */
+  referenceDryRun = false;
   replies: { id: string; body: string }[] = [];
 
   async listComments() { return structuredClone(this.comments); }
@@ -150,6 +159,10 @@ export class FakeAldine implements AldineApi {
 
   async readBinary(_token: string, _projectId: string, _branch: string, path: string) {
     return this.binaries[path] ?? null;
+  }
+
+  async toolHasParam(_token: string, name: string, param: string) {
+    return name === 'references_add' && param === 'dryRun' && this.referenceDryRun;
   }
 
   async compileStatus(): Promise<any> {

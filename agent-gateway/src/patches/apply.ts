@@ -106,11 +106,13 @@ export async function acceptProposal(deps: AcceptDeps, args: { proposal: Proposa
       return p;
     };
 
-    // References first: Aldine resolves each DOI/arXiv id to BibTeX and commits it (as the agent label).
+    // References whose BibTeX is already in the diff land with the other changes. Older proposals (or an
+    // Aldine without dry runs) add theirs first: Aldine resolves the DOI/arXiv id and commits it.
     let references = proposal.references;
-    if (references?.length) {
+    if (references?.some((r) => !r.inDiff && !r.duplicate)) {
       references = [];
       for (const r of proposal.references!) {
+        if (r.inDiff || r.duplicate) { references.push(r); continue; }
         try {
           const res = await aldine.callTool(token, 'references_add', { project: proposal.projectId, branch: proposal.branch, query: r.id, ...(r.bibFile ? { bibFile: r.bibFile } : {}) }, { timeoutMs: 60_000 });
           references.push({ ...r, key: res.key, bibFile: res.bibFile, duplicate: !!res.duplicate });

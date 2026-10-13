@@ -322,7 +322,8 @@ test('research: literature and web results show as sources; a cited paper lands 
   const card = page.getByTestId('proposal-card').last();
   await expect(card.getByTestId('proposal-reference')).toContainText('Coordinating Swarms of Simple Robots');
   await card.getByTestId('proposal-accept').click();
-  await expect(card.getByTestId('proposal-reference')).toContainText('\\cite{', { timeout: 30_000 });
+  await expect(card.getByTestId('proposal-reference')).toContainText('\\cite{');
+  await expect(card.getByTestId('proposal-references')).toContainText('Added to the bibliography', { timeout: 30_000 });
   expect(await fileContent(page.request, id, 'references.bib')).toContain('Coordinating Swarms of Simple Robots');
 });
 

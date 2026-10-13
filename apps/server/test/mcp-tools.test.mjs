@@ -645,6 +645,30 @@ check(store.fileExists(p1.id, 'main', 'nope/missing.bib'), 'the folder and file 
 const refCommits = (await gitops.log(p1.id, 'main')).filter((c) => c.message === 'Add reference doe2020');
 check(refCommits.length === 2 && refCommits.every((c) => c.author === 'Claude'), `each reference landed as an attributed Claude commit (got ${refCommits.length})`);
 
+// dryRun: the entry exactly as it would land, nothing written; with no
+// bibFile the target is the .bib the document loads (the largest of
+// several, so an abbreviations file is passed over), laid out like it
+{
+  const pd = await store.createProject('Reference preview', undefined, user.id);
+  store.writeFile(pd.id, 'main', 'main.tex', '\\documentclass{article}\\begin{document}x\\bibliography{IEEEabrv,refs/mine}\\end{document}\n');
+  store.writeFile(pd.id, 'main', 'IEEEabrv.bib', '@string{IEEE_J_AC = "{IEEE} Trans. Automat. Contr."}\n');
+  const mine = '@article{knuth1984,\n\tTITLE = {Literate Programming},\n\tAUTHOR = {Knuth, Donald},\n\tYEAR = {1984},\n}\n';
+  store.writeFile(pd.id, 'main', 'refs/mine.bib', mine);
+  await new Promise((r) => setTimeout(r, 2100)); // refLimiter refill
+  ({ body } = await call('references_add', { project: pd.id, query: '10.1145/mock.12345', dryRun: true }));
+  check(body.dryRun === true && body.bibFile === 'refs/mine.bib' && body.key === 'doe2020' && body.duplicate === false && body.created === false, `dryRun previews against the loaded, non-abbreviation .bib (got ${JSON.stringify(body)})`);
+  check(/^@article\{doe2020,\n\tTITLE\s*= /.test(body.entry) && !/^ {2}[a-z]/m.test(body.entry), `the preview follows the file's tab indent and upper-case field names (got ${JSON.stringify(body.entry)})`);
+  check(store.readFile(pd.id, 'main', 'refs/mine.bib').toString('utf8') === mine, 'a dry run writes nothing');
+  // Only what the root compiles counts: a sibling variant's .bib (bigger here) is not the default.
+  store.writeFile(pd.id, 'main', 'main_blind.tex', '\\documentclass{article}\\begin{document}x\\bibliography{blind}\\end{document}\n');
+  store.writeFile(pd.id, 'main', 'blind.bib', mine + '@misc{a1,title={A}}\n@misc{a2,title={B}}\n');
+  store.writeFile(pd.id, 'main', 'main.tex', '\\documentclass{article}\\begin{document}x\\input{back}\\end{document}\n');
+  store.writeFile(pd.id, 'main', 'back.tex', '% \\bibliography{blind}\n\\bibliography{IEEEabrv,refs/mine}\n');
+  const { defaultBibFile } = await import('../src/references.ts');
+  check(defaultBibFile(pd.id, 'main', 'main.tex') === 'refs/mine.bib', 'the default follows the root through \\input and ignores comments and sibling documents');
+  check(defaultBibFile(pd.id, 'main', 'main_blind.tex') === 'blind.bib', 'with the blind variant as root, its own .bib is the default');
+}
+
 // an entry added under an older key style (doi.org's `Doe_2020`) is the same
 // paper: the DOI says so, and the existing key is what the caller should cite;
 // Claude appears in the .bib only when it writes to it — a duplicate or a

@@ -53,6 +53,8 @@ export interface AldineApi {
   /** A bearer credential acting as this user on this project only. */
   credential(identity: Identity, projectId: string): Promise<string>;
   callTool(token: string, name: string, args: Record<string, unknown>, opts?: ToolCallOptions): Promise<any>;
+  /** Whether Aldine's tool `name` declares input parameter `param` (an older server would ignore, not refuse, an unknown one). */
+  toolHasParam(token: string, name: string, param: string): Promise<boolean>;
   compileStatus(token: string, projectId: string, branch: string): Promise<any>;
   /** Review comments on a branch (Aldine's Review tab). */
   listComments(token: string, projectId: string, branch: string): Promise<ReviewComment[]>;

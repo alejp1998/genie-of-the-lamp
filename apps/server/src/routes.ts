@@ -18,7 +18,7 @@ import { listPlugins, pluginAssetPath } from './plugins.js';
 import { listAllTemplates, resolveTemplateSeed, type TemplateSeed } from './templates.js';
 import { warmVenueCache } from './catalog.js';
 import { startTemplateRepoRefresh, syncAllTemplateRepos, templateRepoStates } from './templaterepos.js';
-import { addReference, fetchBibEntry, searchWorks } from './references.js';
+import { addReference, defaultBibFile, fetchBibEntry, searchWorks } from './references.js';
 import { bibIndex, labelIndex, wordCount } from './indexes.js';
 import { unzip, zipEntryCount, ZipError } from './unzip.js';
 import { guessRoot, detectRoot, adoptRootIfUnset } from './root.js';
@@ -1350,7 +1350,8 @@ h1{font-size:1.1rem;margin:0 0 .5rem}p{margin:0 0 1.25rem;color:var(--muted);ove
       try {
         // default next to the root file (see zotero/link) so inserted cites
         // land in a .bib the document actually reads
-        const bibFile = req.body?.bibFile || rootSiblingPath((await store.readMeta(req.params.id)).rootFile, 'references.bib');
+        await gitops.ensureWorktree(req.params.id, branch);
+        const bibFile = req.body?.bibFile || defaultBibFile(req.params.id, branch, (await store.readMeta(req.params.id)).rootFile);
         if (isHiddenPath(bibFile)) return reply.code(403).send({ error: 'forbidden path' });
         const added = await addReference(req.params.id, branch, query, bibFile);
         if (!added) return reply.code(404).send({ error: 'No reference found for that DOI/arXiv id' });
