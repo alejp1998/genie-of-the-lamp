@@ -126,10 +126,10 @@ Running dev log for the MVP in `ALDINE_AGENT_FORK_SPEC.md` (task brief:
   - **Instructions: [`agent-gateway/README.md`](agent-gateway/README.md).**
   - Verified on a fresh stack: only the front is published; Haiku proposal → Accept → "Smoke Tester (via Paper Assistant)" → clean typeset in the sandboxed compiler; no keys, tokens or cookies in the logs.
 - **Test status at handover:**
-  - gateway `npm test` 56/56;
-  - web `vitest` 76/76;
+  - gateway `npm test` 63/63;
+  - web `vitest` 79/79;
   - Aldine server unit tests 44/45, plus 1 that needs full TeX Live (`agujournal2019.cls`). `autocommit-race` passes once Node 26's localStorage warning is silenced; CI uses Node 22;
-  - assistant e2e 8/8;
+  - assistant e2e 10/10 (includes research against a local OpenAlex/arXiv/SearXNG/doi.org stand-in);
   - Aldine full e2e 164/164 at the Phase 4 commit (rerun result below).
 
 - 2026-10-13 — **Research, done.** Everything uses free, open sources (Scite was considered and rejected: it is paid, has no general web search, and the university has no data processing agreement with it).

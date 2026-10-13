@@ -301,3 +301,27 @@ test('double-clicking commented text opens its thread in the Review tab', async 
   await expect(page.getByTestId('tab-review')).toHaveClass(/sidebar__tab--active/);
   await expect(page.getByTestId(`comment-${comment.id}`)).toHaveClass(/review__item--active/);
 });
+
+test('research: literature and web results show as sources; a cited paper lands in the bibliography on accept', async ({ page }) => {
+  await signUp(page.request, 'Ada');
+  const id = await newProject(page.request);
+  await openAssistant(page, id);
+  await ask(page, 'Find work on swarms [[tool:search_literature {"query":"swarm robots"}]] [[tool:web_search {"query":"swarm robotics"}]] [[tool:fetch_url {"url":"http://127.0.0.1:3263/page"}]]');
+  const sources = page.getByTestId('assistant-sources').last();
+  const paper = sources.getByTestId('assistant-source').filter({ hasText: 'Coordinating Swarms of Simple Robots' });
+  await expect(paper).toContainText('Hopper et al. · Journal of Swarm Studies · 2025');
+  await expect(paper).toContainText('1,234 citations');
+  await expect(sources.getByTestId('assistant-source').filter({ hasText: 'Swarm robotics overview' }).first()).toContainText('127.0.0.1:3263');
+  await expect(page.getByTestId('assistant-tool').filter({ hasText: 'Found 1 paper' })).toBeVisible();
+  // Cite on a paper card asks the assistant to add and cite it.
+  await paper.getByTestId('assistant-source-cite').click();
+  await expect(page.getByTestId('assistant-user-msg').last()).toContainText('10.5555/swarm.2025.42');
+  await expect(page.getByTestId('assistant-stop')).toHaveCount(0, { timeout: 30_000 });
+  // A proposal that adds the reference: on Accept, Aldine writes the BibTeX and reports the key.
+  await ask(page, '[[tool:propose_patch {"summary":"Add the swarm reference","changes":[],"add_references":[{"id":"10.5555/swarm.2025.42"}]}]]');
+  const card = page.getByTestId('proposal-card').last();
+  await expect(card.getByTestId('proposal-reference')).toContainText('Coordinating Swarms of Simple Robots');
+  await card.getByTestId('proposal-accept').click();
+  await expect(card.getByTestId('proposal-reference')).toContainText('\\cite{', { timeout: 30_000 });
+  expect(await fileContent(page.request, id, 'references.bib')).toContain('Coordinating Swarms of Simple Robots');
+});
