@@ -16,6 +16,18 @@ All notable changes to Aldine are documented here. The format follows
   human-readable tool activity, the open file, cursor and selection attached
   to each message, and private or project-shared chat sessions. It becomes a
   drawer on phones.
+- Assistant proposals (Aladine fork): word-level diffs with Accept, Edit and
+  Reject. Accepted changes commit as "<you> (via Paper Assistant)". The
+  assistant can answer review comments one by one, replying and resolving each
+  on Accept. Attachments: `@` file references, pasted or dropped text files,
+  PDFs and screenshots.
+- Find in the PDF preview (Ctrl/Cmd+F, or Find in the preview header).
+- Images and PDFs in the file tree open as previews in the editor area.
+- The selection toolbar offers Comment; the comment dialog shows the commented
+  lines in the editor's style, as full lines or the selection only.
+- MCP writes sent with `X-Aldine-Agent-Label: <name>` commit as
+  "<user> (via <name>)" and show that name in presence; replies posted with an
+  access token and the same header do too.
 - `HOST` sets the address the server listens on (default `0.0.0.0`), so a
   development server can stay on `127.0.0.1`.
 - The divider between editor and preview can be dragged with a finger or a

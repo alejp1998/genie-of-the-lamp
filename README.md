@@ -14,7 +14,7 @@
 [![Default model: Claude Haiku 5.5](https://img.shields.io/badge/Default%20model-Claude%20Haiku%205.5-d97757.svg)](agent-gateway/DESIGN.md)
 [![Providers](https://img.shields.io/badge/Providers-Anthropic%20%7C%20OpenAI--compatible%20%7C%20local-3e617d.svg)](agent-gateway/DESIGN.md)
 [![Docker Compose](https://img.shields.io/badge/Deploy-Docker%20Compose-2496ED.svg?logo=docker&logoColor=white)](docker-compose.yml)
-[![Status: pre-alpha](https://img.shields.io/badge/Status-pre--alpha-lightgrey.svg)](PROGRESS.md)
+[![Status: MVP](https://img.shields.io/badge/Status-MVP-6d4fd8.svg)](PROGRESS.md)
 
 *A fork of [Aldine](https://github.com/trahloff/Aldine), the slim, self-hosted Overleaf alternative.*
 
@@ -22,9 +22,9 @@
 
 ---
 
-> **Development status:** Aladine is in active development. The Aldine editor underneath is usable
-> today. The assistant (the Agent Gateway and the assistant panel) is being built in phases,
-> tracked in [PROGRESS.md](PROGRESS.md). Interfaces and configuration will change before the first tag.
+> **Development status:** the MVP is complete and runs end to end: assistant panel, Agent Gateway, reviewable
+> proposals, attribution and review-comment handling. The project is young: interfaces and configuration may
+> still change before the first tag. Progress is logged in [PROGRESS.md](PROGRESS.md).
 
 ## What is Aladine?
 
@@ -74,44 +74,38 @@ The name joins **Aldine** and **Aladdin**. Aldine, named after the Aldine Press 
 - 📚 **References**: native Zotero, DOI/arXiv lookup, citation and label indexes
 - 🔌 **MCP endpoint** at `/mcp` for external agents such as Claude Code and claude.ai connectors
 
-**What Aladine adds** (✅ done · 🚧 in progress · 🗓️ planned):
+**What Aladine adds:**
 
-| | Feature | |
-|---|---|---|
-| 🧞 | **Assistant panel**: collapsible, resizable right-hand pane in Aldine's own design language that becomes a drawer on small screens. There is no separate "AI mode". | 🗓️ |
-| 💬 | **Streaming chat** with history stored per project and user, with concise tool-progress lines (*Reading related_work.tex… Compiling…*) and raw traces under "Details" | 🗓️ |
-| 🎯 | **Context without copy-paste**: open file, cursor, selection, branch, and latest compile status and errors are attached to each message | 🗓️ |
-| 🖍️ | **Selection actions**: Explain · Improve wording · Fix LaTeX · Add citation · Ask about selection. Each pre-fills a prompt and never edits directly. | 🗓️ |
-| 🧾 | **Reviewable patches**: `propose_patch` returns a diff, and `apply_approved_patch` applies only after you click **Accept**, checked against the revision the agent read | 🗓️ |
-| 🪪 | **Git provenance**: commits authored as `You (via Paper Assistant)`, with session, model, provider and base/resulting revision recorded | 🗓️ |
-| 🔒 | **Private by default**: chat sessions are visible to their owner unless explicitly shared with the project, and shared sessions are labelled in the list | 🗓️ |
-| 🛡️ | **Gateway hygiene**: audit log for every tool call, bounded tool loops, timeouts, cancellation, and keys kept server-side | 🗓️ |
-| 🔁 | **Model-agnostic**: provider adapters for Anthropic and OpenAI-compatible APIs, which also cover OpenRouter, vLLM, llama.cpp and Ollama | 🗓️ |
+| | Feature |
+|---|---|
+| 🧞 | **Assistant panel**: a resizable pane next to the PDF, in Aldine's own design language, that becomes a drawer on phones. There is no separate "AI mode". It appears only where an Agent Gateway is deployed. |
+| 💬 | **Streaming chat** stored per project and user. Tool activity shows as one line per step (*Reading main.tex… → Read lines 1–120*), with the exact input and result one click away. |
+| 🎯 | **Context without copy-paste**: the open file, cursor, selection and branch go with each message, and the gateway fetches compile status and errors itself. |
+| 📎 | **Attachments**: `@file` references with autocomplete. Paste or drop any text file, PDF or screenshot: PDFs are read natively by models that support them, and images are seen by vision models. |
+| 🖍️ | **Selection toolbar**: Comment · Ask · Explain · Improve · Fix LaTeX · Cite. Each pre-fills an editable prompt with the selection attached; nothing edits the document directly. There are also `/` commands. |
+| 🧾 | **Reviewable proposals**: word-level diffs (deleted words struck through, inserted words marked), with Accept, Edit and Reject. Each proposal is rebased by its anchors on the current text, so a collaborator's change is never overwritten. A newer proposal replaces an undecided one. |
+| 📝 | **Review comments**: the assistant reads Aldine's review threads and handles them one reviewed proposal at a time. On Accept it replies and resolves the thread, then moves on to the next. |
+| 🪪 | **Git provenance**: accepted changes commit as `You (via Paper Assistant)`, with session, model and base revision trailers and a full attribution record in the audit log. Claude Code over MCP can commit as `You (via Claude Code)`. |
+| 🔒 | **Private by default**: chats can be shared with project collaborators as read-only and are labelled in the session list. |
+| 🛡️ | **Gateway hygiene**: an audit log for every tool call and decision; caps on steps, compiles, time and size; cancellation; keys kept on the server. |
+| 🔁 | **Model-agnostic**: Anthropic (default Claude Haiku 5.5, with prompt caching), OpenAI, OpenRouter and any OpenAI-compatible or local endpoint. |
+| 🔎 | **Editor additions**: Find in PDF (Ctrl/Cmd+F) with highlighted matches; project images and PDFs open as previews; read-only tabs for attachments, tool outputs and diffs; a comment composer that shows the commented lines in context. |
 
 The full product spec is in [ALDINE_AGENT_FORK_SPEC.md](ALDINE_AGENT_FORK_SPEC.md), and the recon findings and gateway design are in [agent-gateway/DESIGN.md](agent-gateway/DESIGN.md).
 
 ## Quick start
 
-Today this runs the upstream Aldine stack: the editor plus the sandboxed compiler.
+Aldine, its sandboxed compiler, the Agent Gateway and a same-origin front proxy, built from this repository:
 
 ```bash
 git clone git@github.com:alejp1998/Aladine.git && cd Aladine
-docker compose up -d          # Aldine app on :8080 + no-egress TeX Live compiler
+cp agent-gateway/.env.example agent-gateway/.env      # add ANTHROPIC_API_KEY (or a local model URL)
+docker compose -f docker-compose.yml -f docker-compose.agent.yml up -d --build
 ```
 
-Open [localhost:8080](http://localhost:8080). The Agent Gateway compose overlay, with the assistant, MCP and auth already wired, will be documented in [`agent-gateway/README.md`](agent-gateway/README.md) once it lands.
+Open [localhost:8080](http://localhost:8080), sign up, create or import a project and click **Assistant**. [`agent-gateway/README.md`](agent-gateway/README.md) covers configuration, binding to a network address, TLS, Claude Code over MCP, the security model and operations.
 
-The gateway reads its configuration from environment variables, kept in `agent-gateway/.env`, which is git-ignored:
-
-```env
-AGENT_DEFAULT_PROVIDER=anthropic
-AGENT_DEFAULT_MODEL=claude-haiku-5-5
-ANTHROPIC_API_KEY=...
-
-# Optional: any OpenAI-compatible endpoint (vLLM, llama.cpp, Ollama, OpenRouter)
-LOCAL_LLM_BASE_URL=http://vllm:8000/v1
-LOCAL_LLM_MODEL=qwen3-instruct
-```
+Plain `docker compose up -d` still runs upstream Aldine on its own, without the assistant.
 
 ### Development
 
@@ -131,11 +125,12 @@ The Aldine test suites work as upstream: `npm run typecheck -w apps/web`, `npm r
 |------|---------|
 | `agent-gateway/` | **New.** Agent Gateway service: auth delegation, sessions, provider adapters, MCP client, patch workflow, audit |
 | `apps/server/` | Aldine API, Yjs collab, per-project Git, MCP server (`src/mcp/`). Changes here are small and isolated |
-| `apps/web/` | Aldine React SPA. The assistant panel will live in `src/assistant/` |
+| `apps/web/` | Aldine React SPA. The assistant panel lives in `src/assistant/`; editor additions are in `src/components/` (previews, document tabs, find in PDF, word diff) |
 | `apps/compiler/` | Sandboxed latexmk wrapper (unchanged) |
 | `claude-plugin/` | Claude Code plugin and skills for driving Aldine over MCP |
 | `docs/` | Aldine docs (`AGENT_API.md`, `OIDC.md`, `SCALING.md`) plus Aladine branding in `docs/images/` |
-| `deploy/` | Compose overlays, reverse-proxy samples, cloud stacks |
+| `deploy/` | Compose overlays, reverse-proxy samples, cloud stacks; `deploy/agent/` (Caddy front), `deploy/dev-review/` (live-review dev stack) |
+| `docker-compose.agent.yml` | Overlay that adds the gateway and front proxy and builds the app from this fork |
 | `PROGRESS.md` | Running dev log: Done / In progress / Blocked / Next |
 
 ## Staying close to upstream

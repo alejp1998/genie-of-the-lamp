@@ -152,12 +152,31 @@ agent-gateway/
 | POST | `/proposals/:id/accept` | `{edited?}` re-validates, rebases, applies through `batch_write`, auto-compiles, and returns `{commit, compile}`. |
 | POST | `/proposals/:id/reject` | Marks the proposal rejected; the document is untouched. |
 
-### 2.4 Phases, revised
+### 2.4 Phases, revised (status 2026-10-13)
 
 1. **Recon.** ✅
-2. **Gateway core.** Config; Aldine identity, PAT broker and MCP/REST clients; SQLite store; provider adapters (Anthropic, OpenAI-compatible, mock); bounded loop with the read-only tools; run, event, SSE and cancel APIs; audit. Unit tests, plus an integration test against a local Aldine dev server (auth on, MCP on).
-3. **Panel walking skeleton.** Right-hand pane with resizer, toggle and the `aldine.experimental.assistant` flag; session list; streaming chat; tool-activity lines and Details; context capture. Served live at `http://10.211.108.8:8095` and checked visually.
-4. **Patches and attribution.** `propose_patch`, then the diff card with Accept / Edit / Reject, then rebase and apply, then auto-compile. Core change: `X-Aldine-Agent-Label` in commits and presence, plus the `isAgentAuthor()` predicate. e2e test with the mock provider.
-5. **Sessions and polish.** Sharing with the project and its labels; selection actions; mobile drawer; per-project persistence of panel width and open state; "Ask the assistant to fix".
-6. **Deliverable.** Compose overlay (app built from this fork's source, gateway, Caddy front proxy; Aldine's volumes and compiler sandbox untouched); `agent-gateway/README.md`; evaluation script for the spec's tasks.
-7. **Extended tools** (after the MVP): bibliography search, citation validation, checkpoints, agent history.
+2. **Gateway core.** ✅ Config, identity, PAT broker, MCP/REST, SQLite, providers (Anthropic, OpenAI-compatible, mock), bounded loop, runs with SSE, audit.
+3. **Panel walking skeleton.** ✅ Pane, resizer, sessions, streaming, tool activity, context. Served at the review URL.
+4. **Patches and attribution.** ✅ `propose_patch`, Accept / Edit / Reject, anchor rebase, `batch_write`, auto-compile, the `X-Aldine-Agent-Label` core change, e2e with the mock model.
+5. **Sessions and polish.** ✅ Sharing; selection toolbar; drawer; per-project persistence; Ask to fix. Added at the user's request:
+   - attachments: any text file, PDFs, images, `@` references;
+   - `view_image`;
+   - read-only document tabs, file previews, find in PDF;
+   - word-level diffs, supersede;
+   - review comments with sequential continuation;
+   - the comment composer in context.
+6. **Deliverable.** ✅ `docker-compose.agent.yml`, gateway Dockerfile, Caddy front, `agent-gateway/README.md`.
+7. **Evaluation.** Next: a script running the spec's tasks with real models.
+8. **Extended tools** (after the MVP): bibliography search, citation validation, checkpoints, agent history.
+
+### 2.5 Tool surface (model-facing)
+
+| Tool | Kind |
+|---|---|
+| `list_files`, `read_file`, `search_project` | read |
+| `get_compile_status`, `compile` | read / compile (capped) |
+| `list_citations`, `list_labels`, `list_comments` | read |
+| `view_image` | read (image to the model) |
+| `propose_patch` | stores a proposal: edits, new files, comment answers, `continue_after_review` |
+
+No write tool reaches the model; writes happen only on a person's Accept.
