@@ -616,6 +616,11 @@ body:has(.modal-backdrop) .assistant-sel { display: none; }
   white-space: nowrap;
 }
 .sidebar__tab:hover { background: var(--bg-hover); }
+.sidebar__gear { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 26px; height: 26px; border: 0; border-radius: var(--radius-s); background: transparent; color: var(--text-2); cursor: pointer; }
+.sidebar__gear:hover { background: var(--bg-hover); color: var(--text); }
+.settings__tabs { flex-wrap: wrap; gap: 4px 14px; }
+.settings__tab { display: inline-flex; align-items: center; gap: 6px; cursor: pointer; }
+.settings__tabs .settings__hint { flex-basis: 100%; }
 .sidebar__tab:active { background: var(--bg-active); }
 .sidebar__tab--active { background: var(--bg-active); color: var(--text); font-weight: 600; }
 .sidebar__body { flex: 1; overflow: auto; padding: 6px; }

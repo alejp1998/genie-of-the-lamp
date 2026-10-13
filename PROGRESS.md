@@ -138,6 +138,11 @@ Running dev log for the MVP in `ALDINE_AGENT_FORK_SPEC.md` (task brief:
   - Chat text now uses the editor's size (13.5 px); secondary text is 12–12.5 px.
   - Verified live with Haiku: OpenAlex papers, SearXNG results and a page read from dji.com, all shown as source cards. arXiv rate-limited this host (429), and the search fell back to OpenAlex with a note.
 
+- 2026-10-13 — **Sidebar tidy-up (assistant mode only; plain Aldine unchanged):**
+  - Cite and Zotero are hidden by default, and the gear before the sidebar tabs opens the settings, where Sidebar tabs toggles them (saved in `aldine.sidebarTabs` in this browser);
+  - the header Comment button is gone in this mode, since the selection toolbar has Comment;
+  - assistant e2e 11/11; upstream specs for plugins, Zotero, review and settings 41/41; the earlier 09/16/17/18/20/21 failures were a stale e2e server: 44/44 on a clean run.
+
 ### In progress
 - Nothing.
 

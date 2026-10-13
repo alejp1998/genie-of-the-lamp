@@ -16,7 +16,7 @@ import ReviewPanel from '../components/ReviewPanel';
 import Presence, { PresenceUser } from '../components/Presence';
 import { PluginHost, PluginPanel } from '../plugins/host';
 import { hintFor } from '../editor/errorHints';
-import { IconChevronLeft } from '../components/Icons';
+import { IconChevronLeft, IconGear } from '../components/Icons';
 import CommandPalette, { Command } from '../components/CommandPalette';
 import { invalidateBibCache, invalidateLabelCache } from '../editor/latexExtras';
 import { useCommentSignal } from '../editor/commentSignal';
@@ -35,6 +35,7 @@ import FormatToolbar from '../components/FormatToolbar';
 import { toggleTheme } from '../theme';
 import { shortcut } from '../platform';
 import ProjectSettings from '../components/ProjectSettings';
+import { loadTabPrefs, saveTabPrefs, tabShown } from '../util/sidebarTabs';
 import { ENGINES } from '../util/engines';
 import { agentDisplayName, isAgentAuthor } from '../util/agentAuthor';
 import FilePreview, { PREVIEWABLE } from '../components/FilePreview';
@@ -945,7 +946,15 @@ export default function Editor() {
   }, [files, activeFile, id, branch, auto, spellcheck, doCompile, toggleAuto, jumpToPdf, setEngine, setStopOnFirstError, project?.stopOnFirstError, project?.remote, insertAtCursor, loadFiles, loadProject, toast]);
 
   // Where the assistant answers, it covers what the one-shot "Fix" plugin did.
-  const shownPanels = dock.config ? pluginPanels.filter((p) => p.id !== 'plugin:aifix') : pluginPanels;
+  const [tabPrefs, setTabPrefs] = useState(loadTabPrefs);
+  const optionalPanels = dock.config ? pluginPanels.filter((p) => p.id !== 'plugin:aifix') : pluginPanels;
+  const shownPanels = optionalPanels.filter((p) => tabShown(tabPrefs, p.id, !!dock.config));
+  const toggleTab = (pid: string) => {
+    const next = { ...tabPrefs, [pid]: !tabShown(tabPrefs, pid, !!dock.config) };
+    setTabPrefs(next);
+    saveTabPrefs(next);
+    if (!next[pid] && tab === pid) setTab('files');
+  };
   // Images and PDFs in the tree open as previews where the editor would be.
   const previewing = !!activeFile && PREVIEWABLE.test(activeFile) && !!files.find((f) => f.path === activeFile)?.binary;
   const errors = compile.result?.errors?.filter((e) => e.type !== 'typesetting') || [];
@@ -1012,7 +1021,8 @@ export default function Editor() {
           <button className="btn" onClick={() => setShareOpen(true)} data-testid="share-project" title="Invite collaborators or share by link">Share</button>
         )}
         <button className="btn" onClick={() => setSettingsOpen(true)} data-testid="project-settings-open" title="Project settings: compiler, main document, TeX Live">Settings</button>
-        <button className="btn" onClick={startComment} data-testid="add-comment" title="Comment on the selected text">Comment</button>
+        {/* With the assistant, Comment lives in the selection toolbar. */}
+        {!dock.config && <button className="btn" onClick={startComment} data-testid="add-comment" title="Comment on the selected text">Comment</button>}
         <AssistantToggle dock={dock} />
         <Presence users={users} />
         <button className="btn btn--ghost sidebar-toggle" onClick={() => setSidebarHidden((h) => !h)} aria-pressed={!sidebarHidden} data-testid="sidebar-toggle" title="Show or hide the file tree">
@@ -1042,6 +1052,9 @@ export default function Editor() {
       <div className={`workspace${resizing ? ' workspace--resizing' : ''}`}>
         <aside className={`pane sidebar${sidebarHidden ? ' sidebar--hidden' : ''}`} data-testid="sidebar">
           <div className="sidebar__tabs" role="tablist">
+            {dock.config && (
+              <button className="sidebar__gear" onClick={() => setSettingsOpen(true)} title="Settings: sidebar tabs, compiler, appearance" aria-label="Settings" data-testid="sidebar-settings"><IconGear /></button>
+            )}
             <button className={`sidebar__tab ${tab === 'files' ? 'sidebar__tab--active' : ''}`} onClick={() => setTab('files')} role="tab" data-testid="tab-files">Files</button>
             <button className={`sidebar__tab ${tab === 'history' ? 'sidebar__tab--active' : ''}`} onClick={() => setTab('history')} role="tab" data-testid="tab-history">History</button>
             <button className={`sidebar__tab ${tab === 'review' ? 'sidebar__tab--active' : ''}`} onClick={() => setTab('review')} role="tab" data-testid="tab-review">
@@ -1415,6 +1428,8 @@ export default function Editor() {
           onSetEngine={setEngine}
           onSetStopOnFirstError={setStopOnFirstError}
           onToggleAutoTypeset={toggleAuto}
+          tabs={optionalPanels.map((p) => ({ id: p.id, title: p.title, shown: tabShown(tabPrefs, p.id, !!dock.config) }))}
+          onToggleTab={toggleTab}
         />
       )}
 

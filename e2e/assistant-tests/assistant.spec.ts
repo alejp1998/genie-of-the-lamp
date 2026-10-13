@@ -325,3 +325,25 @@ test('research: literature and web results show as sources; a cited paper lands 
   await expect(card.getByTestId('proposal-reference')).toContainText('\\cite{', { timeout: 30_000 });
   expect(await fileContent(page.request, id, 'references.bib')).toContain('Coordinating Swarms of Simple Robots');
 });
+
+test('with the assistant, Cite and Zotero start hidden and the sidebar gear brings them back; Comment lives in the selection toolbar', async ({ page }) => {
+  await signUp(page.request, 'Ada');
+  const id = await newProject(page.request);
+  await openAssistant(page, id);
+  await expect(page.getByTestId('tab-files')).toBeVisible();
+  await expect(page.getByTestId('tab-plugin:references')).toHaveCount(0);
+  await expect(page.getByTestId('tab-plugin:zotero')).toHaveCount(0);
+  await expect(page.getByTestId('add-comment')).toHaveCount(0);
+  await page.getByTestId('sidebar-settings').click();
+  const settings = page.getByTestId('project-settings');
+  await expect(settings.getByTestId('sidebar-tab-settings')).toBeVisible();
+  await expect(settings.getByTestId('settings-tab-plugin:zotero')).not.toBeChecked();
+  await settings.getByTestId('settings-tab-plugin:references').check();
+  await settings.getByTestId('settings-close').click();
+  await page.getByTestId('tab-plugin:references').click();
+  await expect(page.getByTestId('references-panel')).toBeVisible();
+  // The choice is per browser and survives a reload.
+  await page.reload();
+  await expect(page.getByTestId('tab-plugin:references')).toBeVisible();
+  await expect(page.getByTestId('tab-plugin:zotero')).toHaveCount(0);
+});

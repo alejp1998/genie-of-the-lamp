@@ -19,6 +19,9 @@ interface Props {
   onSetEngine(engine: string): Promise<void>;
   onSetStopOnFirstError(on: boolean): Promise<void>;
   onToggleAutoTypeset(): void;
+  /** Optional sidebar tabs (plugin panels) and whether this browser shows them. */
+  tabs?: { id: string; title: string; shown: boolean }[];
+  onToggleTab?(id: string): void;
 }
 
 /**
@@ -26,7 +29,7 @@ interface Props {
  * engine picker and the log dialog's stop-on-error box are shortcuts to the
  * same state). Every change saves on its own; there is no Save button.
  */
-export default function ProjectSettings({ project, branch, files, autoTypeset, importNote, onClose, onRename, onSetRoot, onSetEngine, onSetStopOnFirstError, onToggleAutoTypeset }: Props) {
+export default function ProjectSettings({ project, branch, files, autoTypeset, importNote, onClose, onRename, onSetRoot, onSetEngine, onSetStopOnFirstError, onToggleAutoTypeset, tabs, onToggleTab }: Props) {
   const [name, setName] = useState(project.name);
   const [theme, setThemeChoice] = useState<Theme>(getTheme());
   const [compiler, setCompiler] = useState<CompilerInfo | null>(null);
@@ -163,6 +166,24 @@ export default function ProjectSettings({ project, branch, files, autoTypeset, i
             </span>
           </div>
         </section>
+
+        {tabs && tabs.length > 0 && onToggleTab && (
+          <section data-testid="sidebar-tab-settings">
+            <div className="menu__label" style={{ margin: '18px 0 4px', padding: 0 }}>Sidebar tabs</div>
+            <div className="settings__row">
+              <span className="settings__label">Show</span>
+              <span className="settings__control settings__control--check settings__tabs">
+                {tabs.map((t) => (
+                  <label key={t.id} className="settings__tab">
+                    <input type="checkbox" checked={t.shown} onChange={() => onToggleTab(t.id)} data-testid={`settings-tab-${t.id}`} />
+                    {t.title}
+                  </label>
+                ))}
+                <span className="settings__hint">Files, History and Review always show; applies to this browser</span>
+              </span>
+            </div>
+          </section>
+        )}
 
         <section data-testid="export-settings">
           <div className="menu__label" style={{ margin: '18px 0 4px', padding: 0 }}>Export</div>

@@ -80,6 +80,14 @@ export const IconX = (p: SVGProps<SVGSVGElement>) => (
   </svg>
 );
 
+export const IconGear = (p: SVGProps<SVGSVGElement>) => (
+  <svg {...base(p)} width={14} height={14}>
+    <circle cx="8" cy="8" r="2.2" />
+    <path d="M8 1.5v1.8M8 12.7v1.8M1.5 8h1.8M12.7 8h1.8M3.4 3.4l1.3 1.3M11.3 11.3l1.3 1.3M3.4 12.6l1.3-1.3M11.3 4.7l1.3-1.3" />
+    <circle cx="8" cy="8" r="4.6" />
+  </svg>
+);
+
 /** Icon for a file path. */
 export function fileIcon(path: string, isRoot: boolean) {
   if (isRoot) return <IconStar style={{ color: 'var(--warn)' }} />;
