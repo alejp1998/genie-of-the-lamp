@@ -1401,7 +1401,12 @@ h1{font-size:1.1rem;margin:0 0 .5rem}p{margin:0 0 1.25rem;color:var(--muted);ove
 
   app.post<{ Params: { id: string; cid: string }; Body: { body: string; author?: string } }>(
     '/api/projects/:id/comments/:cid/reply', async (req, reply) => {
-      const c = await comments.replyComment(req.params.id, req.params.cid, reqUser(req)?.name || req.body?.author || 'Anonymous', req.body?.body || '');
+      // An agent replying with an access token says so, as its commits do (X-Aldine-Agent-Label).
+      const raw = req.headers['x-aldine-agent-label'];
+      const label = (req as any)._tokenScope ? (Array.isArray(raw) ? raw[0] : raw)?.trim() : null;
+      const name = reqUser(req)?.name || req.body?.author || 'Anonymous';
+      const author = label && gitops.AGENT_LABEL_RE.test(label) ? gitops.agentAuthorFor(label, reqUser(req)?.name) : name;
+      const c = await comments.replyComment(req.params.id, req.params.cid, author, req.body?.body || '');
       return c || reply.code(404).send({ error: 'comment not found' });
     });
 

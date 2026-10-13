@@ -21,6 +21,7 @@ export const SLASH_COMMANDS: { name: string; hint: string; prompt: string }[] = 
   { name: 'improve', hint: 'Better wording, same meaning and citations', prompt: 'Improve the wording of the selected text without changing its meaning, claims, citations or labels. Propose it as a change.' },
   { name: 'cite', hint: 'Suggest citations from the bibliography', prompt: 'Suggest citations from this project\'s bibliography for the selected text. Use only existing keys and propose the \\cite additions.' },
   { name: 'summarize', hint: 'Summarize the open file', prompt: 'Summarize the open file in one short paragraph.' },
+  { name: 'comments', hint: 'Handle the open review comments one by one', prompt: 'Go through the open review comments one at a time. For each, propose how to address it (an edit, or a reply if no edit is needed); I will accept or reject each before you move on.' },
   { name: 'review', hint: 'List unclear sentences, terminology and LaTeX issues', prompt: 'Review this section for unclear sentences, inconsistent terminology and LaTeX problems. List the issues with file and line; do not change anything yet.' },
 ];
 

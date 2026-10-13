@@ -36,7 +36,10 @@ async function openAssistant(page: Page, projectId: string, file = 'intro.tex') 
 async function ask(page: Page, text: string) {
   await page.getByTestId('assistant-input').fill(text);
   await page.getByTestId('assistant-send').click();
-  await expect(page.getByTestId('assistant-send')).toBeVisible({ timeout: 30_000 }); // run finished
+  // Finished when the box is empty again (sent) and no run is live (no Stop, no status line).
+  await expect(page.getByTestId('assistant-input')).toHaveValue('');
+  await expect(page.getByTestId('assistant-stop')).toHaveCount(0, { timeout: 30_000 });
+  await expect(page.getByTestId('assistant-thinking')).toHaveCount(0, { timeout: 30_000 });
 }
 
 const patch = (replacement: string) => JSON.stringify({
@@ -71,6 +74,10 @@ test('a proposed change is reviewed, accepted, committed as "<user> (via Paper A
   await ask(page, `Tighten it [[tool:propose_patch ${patch('Swarm robotics studies groups of simple robots.')}]]`);
   const card = page.getByTestId('proposal-card');
   await expect(card).toHaveAttribute('data-status', 'pending');
+  // Words view by default: only the changed words are marked.
+  await expect(card.locator('ins.wdiff__ins')).toContainText('studies groups of simple robots');
+  await expect(card.locator('del.wdiff__del')).toContainText('is a field of study');
+  await card.getByTestId('proposal-diff-lines').click();
   await expect(card.getByTestId('proposal-diff')).toContainText('+Swarm robotics studies groups of simple robots.');
   expect(await fileContent(page.request, id, 'intro.tex')).toBe(INTRO); // nothing written yet
   await card.getByTestId('proposal-accept').click();
@@ -254,4 +261,30 @@ test('@ references and the selection toolbar fill the composer without editing a
   await expect(page.getByTestId('assistant-input')).toHaveValue('Explain the selected text in plain words.');
   await expect(page.locator('.assistant__composer [data-testid=assistant-attachment]')).toContainText(['intro.tex:2']);
   expect(await fileContent(page.request, id, 'intro.tex')).toBe(INTRO);
+});
+
+test('review comments: Comment from the selection toolbar, then the assistant answers it on accept and continues', async ({ page }) => {
+  await signUp(page.request, 'Ada');
+  const id = await newProject(page.request);
+  await openAssistant(page, id);
+  // Leave a comment through the selection toolbar.
+  await page.locator('.cm-line', { hasText: 'Swarm robotics is a field of study.' }).click({ clickCount: 3 });
+  await page.getByTestId('sel-comment').click();
+  await page.getByTestId('comment-body').fill('Too vague: say what is studied.');
+  await page.getByTestId('comment-submit').click();
+  const comments = await (await page.request.get(`/api/projects/${id}/comments?branch=main`)).json();
+  expect(comments).toHaveLength(1);
+  const cid = comments[0].id;
+  // The (mock) assistant proposes an edit that answers it, continuing afterwards.
+  await ask(page, `[[tool:propose_patch ${JSON.stringify({ ...JSON.parse(patch('Swarm robotics studies groups of simple robots.')), resolves: [{ comment_id: cid, reply: 'Made the sentence concrete.' }], continue_after_review: true })}]]`);
+  const card = page.getByTestId('proposal-card');
+  await expect(card.getByTestId('proposal-comment')).toContainText('Made the sentence concrete.');
+  await card.getByTestId('proposal-accept').click();
+  await expect(card.getByTestId('proposal-comment-done')).toBeVisible();
+  const after = await (await page.request.get(`/api/projects/${id}/comments?branch=main`)).json();
+  expect(after[0].resolved).toBe(true);
+  expect(after[0].replies[0]).toMatchObject({ author: 'Ada (via Paper Assistant)' });
+  expect(after[0].replies[0].body).toMatch(/^Made the sentence concrete\./);
+  // Resumed on its own once the typeset reported.
+  await expect(page.locator('.assistant__notice--info', { hasText: 'Continued after your review' })).toBeVisible({ timeout: 30_000 });
 });

@@ -74,7 +74,7 @@ export function useAssistant(projectId: string, config: GatewayConfig | null): A
 
   const follow = useCallback((sid: string, runId: string, userText: string, userAttachments?: ItemAttachment[]) => {
     closeStream();
-    setLive({ runId, userText, userAttachments, items: [], status: 'Starting…', done: false });
+    setLive({ runId, userText, userAttachments, items: [], status: userText ? 'Starting…' : 'Continuing after your review…', done: false });
     const es = gateway.events(runId);
     streamRef.current = es;
     let finished = false;
@@ -198,26 +198,32 @@ export function useAssistant(projectId: string, config: GatewayConfig | null): A
     try {
       const { proposal } = await gateway.accept(id, parts);
       upsert(proposal);
-      // The compile after an accept runs in the background; follow it until it reports.
-      for (let i = 0; proposal.status === 'applied' && i < COMPILE_POLL_MAX; i++) {
+      if (proposal.resolves?.some((r) => r.done)) window.dispatchEvent(new Event('aldine:comments-changed'));
+      // The compile after an accept runs in the background; follow it until it
+      // reports, then pick up the run that continues a review, if one starts.
+      let latest = proposal;
+      const settled = (p: Proposal) => !!p.compile || !p.changes.length;
+      for (let i = 0, extra = 0; latest.status === 'applied' && i < COMPILE_POLL_MAX; i++) {
+        if (settled(latest) && (!latest.continueAfterReview || latest.continuedRunId || extra++ >= 3)) break;
         await new Promise((r) => setTimeout(r, COMPILE_POLL_MS));
-        const { proposal: p } = await gateway.proposal(id);
-        upsert(p);
-        if (p.compile) break;
+        latest = (await gateway.proposal(id)).proposal;
+        upsert(latest);
       }
+      if (latest.continuedRunId && sessionRef.current === latest.sessionId) follow(latest.sessionId, latest.continuedRunId, '');
     } catch (e) {
       setError((e as Error).message);
       gateway.proposal(id).then(({ proposal }) => upsert(proposal)).catch(() => {});
     }
-  }, [upsert]);
+  }, [upsert, follow]);
 
   const reject = useCallback(async (id: string) => {
     setError(null);
     try {
       const { proposal } = await gateway.reject(id);
       upsert(proposal);
+      if (proposal.continuedRunId && sessionRef.current === proposal.sessionId) follow(proposal.sessionId, proposal.continuedRunId, '');
     } catch (e) { setError((e as Error).message); }
-  }, [upsert]);
+  }, [upsert, follow]);
 
   const items = useMemo(
     () => (detail ? buildTranscript(detail.messages, detail.activity, live?.runId ?? null) : []),

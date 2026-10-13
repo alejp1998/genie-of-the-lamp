@@ -46,7 +46,7 @@ test('commit message fits Aldine\'s 200-character limit and keeps the trailers',
 });
 
 test('decision notes summarise outcomes for the model', () => {
-  const base = { id: 'p1234567', summary: 'Fix it', edited: true, commit: 'abc', compile: { ok: false, errorsTotal: 1, errors: [{ file: 'a.tex', line: 3, message: 'Undefined' }] } } as unknown as Proposal;
+  const base = { id: 'p1234567', summary: 'Fix it', changes: [{ path: 'a.tex', kind: 'edit' }], edited: true, commit: 'abc', compile: { ok: false, errorsTotal: 1, errors: [{ file: 'a.tex', line: 3, message: 'Undefined' }] } } as unknown as Proposal;
   const note = decisionsNote([{ ...base, status: 'applied' }, { ...base, id: 'p2', status: 'rejected' }])!;
   assert.match(note, /accepted after the user edited it, committed as abc; the compile afterwards failed with 1 error\(s\): a\.tex:3 Undefined/);
   assert.match(note, /rejected; the files are unchanged/);
@@ -229,4 +229,74 @@ test('a newer proposal for the same file replaces the undecided one', async () =
   assert.equal((await fetch(`${gw}/proposals/${first.id}/accept`, as('alice', { method: 'POST', body: '{}' }))).status, 409);
   const result = JSON.parse(detail.messages.filter((m: any) => m.runId === sent.run.id && m.role === 'user')[1].blocks[0].content);
   assert.deepEqual(result.replaced, [first.id.slice(0, 8)]);
+});
+
+// ---------- review comments ----------
+
+const COMMENT = { id: 'c1', branch: 'main', file: 'intro.tex', anchor: { from: 0, to: 10, quote: 'Swarm robotics is a field of study.' }, author: 'Bob', body: 'Too vague, say what is studied.', resolved: false, createdAt: '2026-10-13T10:00:00Z', replies: [] };
+
+test('list_comments shows open threads with file, line and quote', async () => {
+  aldine.comments = [COMMENT, { ...COMMENT, id: 'c2', resolved: true, body: 'old' }];
+  const s = (await j(await fetch(`${gw}/projects/p1/sessions`, as('alice', { method: 'POST', body: '{}' })))).session;
+  const sent = await j(await fetch(`${gw}/sessions/${s.id}/messages`, as('alice', { method: 'POST', body: JSON.stringify({ text: 'handle the review [[tool:list_comments {}]]', context: { branch: 'main' } }) })));
+  await (await fetch(`${gw}/runs/${sent.run.id}/events`, as('alice'))).text();
+  const detail = await j(await fetch(`${gw}/sessions/${s.id}`, as('alice')));
+  const res = JSON.parse(detail.messages[2].blocks[0].content);
+  assert.equal(res.comments.length, 1);
+  assert.deepEqual([res.comments[0].id, res.comments[0].file, res.comments[0].line, res.comments[0].author], ['c1', 'intro.tex', 2, 'Bob']);
+  assert.equal(res.resolvedHidden, 1);
+});
+
+test('accepting a proposal that resolves a comment replies, resolves, and continues to the next item', async () => {
+  aldine.comments = [structuredClone(COMMENT)];
+  aldine.replies = [];
+  const { proposal, session } = await propose({ ...JSON.parse(JSON.stringify(PATCH)), resolves: [{ comment_id: 'c1', reply: 'Made it concrete.' }], continue_after_review: true });
+  assert.equal(proposal.resolves![0].author, 'Bob');
+  assert.equal(proposal.continueAfterReview, true);
+  const res = await j(await fetch(`${gw}/proposals/${proposal.id}/accept`, as('alice', { method: 'POST', body: '{}' })));
+  assert.equal(res.proposal.resolves[0].done, true);
+  assert.equal(aldine.comments[0].resolved, true);
+  assert.match(aldine.replies[0].body, new RegExp(`^Made it concrete\\.\\n\\n\\(${res.proposal.commit.slice(0, 7)}\\)$`));
+  // After the typeset reports, the assistant is resumed with the decision in hand.
+  const after = await waitFor(async () => j(await fetch(`${gw}/proposals/${proposal.id}`, as('alice'))), (r) => !!r.proposal.continuedRunId);
+  const runId = after.proposal.continuedRunId;
+  assert.ok(runId);
+  await (await fetch(`${gw}/runs/${runId}/events`, as('alice'))).text();
+  const detail = await j(await fetch(`${gw}/sessions/${session.id}`, as('alice')));
+  const cont = detail.messages.find((m: any) => m.runId === runId && m.role === 'user');
+  assert.ok(cont.blocks.some((b: any) => b.note === 'continue'));
+  assert.ok(!cont.blocks.some((b: any) => b.type === 'text' && !b.meta), 'no visible user text in a continuation');
+  assert.match(cont.blocks[0].text, /Replied to and resolved 1 of 1 review comment/);
+});
+
+test('reject continues too; proposals without continue_after_review do not; reply-only answers write nothing', async () => {
+  aldine.comments = [structuredClone(COMMENT)];
+  const a = await propose({ ...JSON.parse(JSON.stringify(PATCH)), continue_after_review: true });
+  const r = await j(await fetch(`${gw}/proposals/${a.proposal.id}/reject`, as('alice', { method: 'POST', body: '{}' })));
+  assert.ok(r.proposal.continuedRunId);
+  await (await fetch(`${gw}/runs/${r.proposal.continuedRunId}/events`, as('alice'))).text();
+
+  const b = await propose();
+  const r2 = await j(await fetch(`${gw}/proposals/${b.proposal.id}/reject`, as('alice', { method: 'POST', body: '{}' })));
+  assert.equal(r2.proposal.continuedRunId ?? null, null);
+
+  aldine.commits = [];
+  const c = await propose({ summary: 'Answer Bob', changes: [], resolves: [{ comment_id: 'c1', reply: 'Kept as is: the next sentence makes it concrete.' }] });
+  const acc = await j(await fetch(`${gw}/proposals/${c.proposal.id}/accept`, as('alice', { method: 'POST', body: '{}' })));
+  assert.equal(acc.proposal.status, 'applied');
+  assert.equal(aldine.commits.length, 0);
+  assert.equal(aldine.comments[0].resolved, true);
+});
+
+test('a decision made while the reply is still streaming continues once the run ends', async () => {
+  aldine.delayMs = 0;
+  const s = (await j(await fetch(`${gw}/projects/p1/sessions`, as('alice', { method: 'POST', body: '{}' })))).session;
+  const patch = { ...JSON.parse(JSON.stringify(PATCH)), continue_after_review: true };
+  const sent = await j(await fetch(`${gw}/sessions/${s.id}/messages`, as('alice', { method: 'POST', body: JSON.stringify({ text: `[[tool:propose_patch ${JSON.stringify(patch)}]]`, context: { branch: 'main' } }) })));
+  // Reject as soon as the proposal exists, while the mock is still writing its closing text.
+  const p = await waitFor(async () => store.listProposals(s.id)[0], (x) => !!x, 3000);
+  await fetch(`${gw}/proposals/${p.id}/reject`, as('alice', { method: 'POST', body: '{}' }));
+  await (await fetch(`${gw}/runs/${sent.run.id}/events`, as('alice'))).text();
+  const later = await waitFor(async () => store.getProposal(p.id)!, (x) => !!x.continuedRunId, 3000);
+  assert.ok(later.continuedRunId);
 });

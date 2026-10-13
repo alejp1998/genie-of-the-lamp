@@ -77,6 +77,8 @@ export interface AcceptDeps {
   store: Store;
   aldine: AldineApi;
   config: Config;
+  /** Called once the decision is complete (after the typeset for an accept). */
+  onSettled?(p: Proposal): void;
 }
 
 /**
@@ -103,6 +105,15 @@ export async function acceptProposal(deps: AcceptDeps, args: { proposal: Proposa
       audit('proposal_accept', 'denied', { proposal: proposal.id, reason });
       return p;
     };
+
+    // A reply-only answer to review comments writes no files.
+    if (!changes.length) {
+      const applied = store.updateProposal(proposal.id, { status: 'applied', edited, decidedBy: identity.user.id, decidedByName: identity.user.name, decidedAt: new Date().toISOString(), reason: null })!;
+      const done = await answerComments(deps, token, applied, null);
+      audit('proposal_accept', 'ok', { proposal: proposal.id, comments: done.resolves?.map((r) => r.commentId) });
+      deps.onSettled?.(done);
+      return done;
+    }
 
     // Rebase on the current text and build the batch.
     const files: Record<string, unknown>[] = [];
@@ -186,15 +197,34 @@ export async function acceptProposal(deps: AcceptDeps, args: { proposal: Proposa
       created_at: now,
     });
 
+    const answered = await answerComments(deps, token, applied, result?.commit ?? null);
+
     void aldine.callTool(token, 'compile', { project: proposal.projectId, branch: proposal.branch }, { timeoutMs: COMPILE_TIMEOUT_MS })
       .then((r) => compileOutcome(r))
       .catch((err) => ({ ok: false, errorsTotal: 0, errors: [{ file: null, line: null, message: `Compile did not run: ${(err as Error).message}` }] }))
       .then((outcome) => {
-        store.updateProposal(proposal.id, { compile: outcome });
+        const p = store.updateProposal(proposal.id, { compile: outcome })!;
         audit('proposal_compile', outcome.ok ? 'ok' : 'error', { proposal: proposal.id, ok: outcome.ok, errorsTotal: outcome.errorsTotal });
+        deps.onSettled?.(p);
       });
-    return applied;
+    return answered;
   });
+}
+
+/** Replies to and resolves the review comments an accepted proposal answers. Failures are recorded, not fatal. */
+async function answerComments(deps: AcceptDeps, token: string, p: Proposal, commit: string | null): Promise<Proposal> {
+  if (!p.resolves?.length) return p;
+  const out: NonNullable<Proposal['resolves']> = [];
+  for (const r of p.resolves) {
+    try {
+      await deps.aldine.replyComment(token, p.projectId, r.commentId, commit ? `${r.reply}\n\n(${commit.slice(0, 7)})` : r.reply);
+      await deps.aldine.resolveComment(token, p.projectId, r.commentId);
+      out.push({ ...r, done: true });
+    } catch (err) {
+      out.push({ ...r, done: false, error: (err as Error).message });
+    }
+  }
+  return deps.store.updateProposal(p.id, { resolves: out })!;
 }
 
 export function rejectProposal(store: Store, args: { proposal: Proposal; session: Session; identity: Identity }): Proposal {
@@ -214,7 +244,9 @@ export function decisionsNote(decided: Proposal[]): string | null {
       const compile = !p.compile ? 'the compile afterwards had not finished'
         : p.compile.ok ? 'the document compiled afterwards'
           : `the compile afterwards failed with ${p.compile.errorsTotal} error(s): ${p.compile.errors.slice(0, 3).map((e) => `${e.file ?? '?'}:${e.line ?? '?'} ${e.message}`).join('; ')}`;
-      return `- ${what}: accepted${p.edited ? ' after the user edited it' : ''}, committed as ${p.commit ?? '(no commit)'}; ${compile}.`;
+      const answered = p.resolves?.length ? ` Replied to and resolved ${p.resolves.filter((r) => r.done).length} of ${p.resolves.length} review comment(s).` : '';
+      if (!p.changes?.length) return `- ${what}: accepted.${answered}`;
+      return `- ${what}: accepted${p.edited ? ' after the user edited it' : ''}, committed as ${p.commit ?? '(no commit)'}; ${compile}.${answered}`;
     }
     if (p.status === 'rejected') return `- ${what}: rejected; the files are unchanged.`;
     return `- ${what}: could not be applied (${p.reason ?? p.status}); the files are unchanged.`;

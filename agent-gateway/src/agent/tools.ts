@@ -26,6 +26,8 @@ export interface ProposalDraft {
   added: number;
   removed: number;
   base: Proposal['base'];
+  resolves?: Proposal['resolves'];
+  continueAfterReview?: boolean;
   /** Filled by the store hook: earlier pending proposals this one replaced. */
   replaced?: string[];
 }
@@ -294,6 +296,33 @@ export const viewImage = tool({
   },
 });
 
+export const listComments = tool({
+  name: 'list_comments',
+  description: 'List the review comments on this branch (Aldine\'s Review tab): who wrote them, the quoted text they are anchored to with its file and line, replies, and any suggested replacement. Open threads only unless include_resolved is true.',
+  schema: z.object({ include_resolved: z.boolean().optional(), file: z.string().max(500).optional() }).strict(),
+  activity: () => 'Reading review comments…',
+  summarize: (r) => `${r.comments.length} ${r.comments.length === 1 ? 'comment' : 'comments'}${r.resolvedHidden ? ` (${r.resolvedHidden} resolved hidden)` : ''}`,
+  async run(input, ctx) {
+    const all = await ctx.aldine.listComments(ctx.token, ctx.projectId, ctx.branch);
+    const shown = all.filter((c) => (input.include_resolved || !c.resolved) && (!input.file || c.file === input.file));
+    const out = [];
+    for (const c of shown) {
+      let line: number | null = null;
+      try {
+        const text = await wholeFile(ctx, c.file);
+        const at = text.indexOf(c.anchor.quote);
+        if (at >= 0) line = text.slice(0, at).split('\n').length;
+      } catch { /* file gone */ }
+      out.push({
+        id: c.id, file: c.file, line, quote: c.anchor.quote.slice(0, 600), author: c.author, comment: c.body,
+        ...(c.suggestion !== undefined ? { suggested_replacement: c.suggestion } : {}),
+        replies: c.replies.map((r) => ({ author: r.author, body: r.body })), resolved: c.resolved,
+      });
+    }
+    return { comments: out, resolvedHidden: input.include_resolved ? 0 : all.filter((c) => c.resolved).length };
+  },
+});
+
 const MAX_PROPOSALS_PER_RUN = 3;
 const PATH_OK = (p: string) => !p.startsWith('/') && !p.includes('\\') && !p.split('/').some((seg) => !seg || seg === '..' || seg.startsWith('.'));
 
@@ -311,16 +340,32 @@ const ChangeInput = z.object({
 
 export const proposePatch = tool({
   name: 'propose_patch',
-  description: 'Propose changes to the project for the user to review. Nothing is written: the user sees a diff and chooses Accept, Edit or Reject. Edit existing files with quote/replacement pairs that quote the current text exactly (read the file first); create a new file with new_content. Group related changes into one proposal with a one-line summary. After proposing, stop and tell the user in one or two sentences what you proposed and why.',
+  description: 'Propose changes to the project for the user to review. Nothing is written: the user sees a diff and chooses Accept, Edit or Reject. Edit existing files with quote/replacement pairs that quote the current text exactly (read the file first); create a new file with new_content. Group related changes into one proposal with a one-line summary. To answer review comments, list them in `resolves` with the reply to post: on Accept each gets the reply and is resolved (changes may be empty for a reply-only answer). When working through several items one at a time, set continue_after_review so you are resumed after the user decides. After proposing, stop and tell the user in one or two sentences what you proposed and why.',
   schema: z.object({
     summary: z.string().min(1).max(160).describe('One line, imperative, e.g. "Close the parenthesis in the update rule"'),
-    changes: z.array(ChangeInput).min(1).max(10),
+    changes: z.array(ChangeInput).max(10),
+    resolves: z.array(z.object({
+      comment_id: z.string().min(1).max(100),
+      reply: z.string().min(1).max(2000).describe('Posted on the thread when the user accepts, e.g. what changed and why'),
+    }).strict()).max(10).optional(),
+    continue_after_review: z.boolean().optional().describe('True while working through a list (e.g. review comments): after Accept or Reject you continue with the next item'),
   }).strict(),
-  activity: (i) => `Proposing changes to ${[...new Set(i.changes.map((c) => c.path))].join(', ')}…`,
-  summarize: (r) => `Proposed changes to ${r.files.join(', ')} (+${r.added} −${r.removed})`,
+  activity: (i) => (i.changes.length ? `Proposing changes to ${[...new Set(i.changes.map((c) => c.path))].join(', ')}…` : 'Drafting a reply to a review comment…'),
+  summarize: (r) => (r.files.length ? `Proposed changes to ${r.files.join(', ')} (+${r.added} −${r.removed})` : `Proposed a reply to ${r.resolves_comments?.length ?? 0} review comment(s)`),
   async run(input, ctx, call) {
     if (!ctx.propose) throw new Error('Proposals are not available in this context.');
     if (ctx.state.proposals >= MAX_PROPOSALS_PER_RUN) throw new Error(`At most ${MAX_PROPOSALS_PER_RUN} proposals per request; wait for the user to review the ones you made.`);
+    if (!input.changes.length && !input.resolves?.length) throw new Error('A proposal needs changes, or resolves for a reply-only answer to review comments.');
+    let resolves: Proposal['resolves'];
+    if (input.resolves?.length) {
+      const all = await ctx.aldine.listComments(ctx.token, ctx.projectId, ctx.branch);
+      resolves = input.resolves.map((r) => {
+        const c = all.find((x) => x.id === r.comment_id);
+        if (!c) throw new Error(`There is no review comment with id ${r.comment_id}; call list_comments for the ids.`);
+        if (c.resolved) throw new Error(`Comment ${r.comment_id} is already resolved.`);
+        return { commentId: c.id, reply: r.reply, author: c.author, quote: c.anchor.quote.slice(0, 200) };
+      });
+    }
     const seen = new Set<string>();
     const changes: ProposalChange[] = [];
     const patches: string[] = [];
@@ -356,13 +401,14 @@ export const proposePatch = tool({
         added += d.added;
       }
     }
-    const draft: ProposalDraft = { toolCallId: call.id, summary: input.summary, changes, diff: patches.join(''), added, removed, base: { head, versions } };
+    const draft: ProposalDraft = { toolCallId: call.id, summary: input.summary, changes, diff: patches.join(''), added, removed, base: { head, versions }, resolves, continueAfterReview: !!input.continue_after_review };
     const p = ctx.propose(draft);
     ctx.state.proposals++;
     return {
       proposal_id: p.id,
       status: 'awaiting_review',
       files: changes.map((c) => c.path),
+      ...(resolves?.length ? { resolves_comments: resolves.map((r) => r.commentId) } : {}),
       added,
       removed,
       ...(draft.replaced?.length ? { replaced: draft.replaced.map((id) => id.slice(0, 8)) } : {}),
@@ -371,7 +417,7 @@ export const proposePatch = tool({
   },
 });
 
-export const READ_TOOLS: AgentTool[] = [listFiles, readFile, searchProject, getCompileStatus, compile, listCitations, listLabels, viewImage];
+export const READ_TOOLS: AgentTool[] = [listFiles, readFile, searchProject, getCompileStatus, compile, listCitations, listLabels, viewImage, listComments];
 export const ASSISTANT_TOOLS: AgentTool[] = [...READ_TOOLS, proposePatch];
 
 export function toolSpecs(tools: AgentTool[]): ToolSpec[] {

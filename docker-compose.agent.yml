@@ -1,0 +1,57 @@
+# Aladine: Aldine + the Agent Gateway, built from this repository.
+#
+#   cp agent-gateway/.env.example agent-gateway/.env   # add a provider key
+#   docker compose -f docker-compose.yml -f docker-compose.agent.yml up -d --build
+#
+# Overlays docker-compose.yml without touching its volumes or the compiler's
+# sandbox: the app is built from this fork's source (assistant panel and
+# agent attribution), the gateway and a Caddy front are added, and only the
+# front is published. agent-gateway/README.md has the details.
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: apps/server/Dockerfile
+    image: aladine-app:local
+    ports: !reset []
+    environment:
+      AUTH_ENABLED: ${AUTH_ENABLED:-1}
+      ALDINE_MCP: ${ALDINE_MCP:-1}
+      ALDINE_PUBLIC_URL: ${ALADINE_PUBLIC_URL:-}
+      TRUST_PROXY: "1"
+      # One gateway acts for every user, so its MCP traffic shares this budget.
+      RL_MCP_BURST: ${RL_MCP_BURST:-600}
+
+  gateway:
+    build:
+      context: ./agent-gateway
+    image: aladine-agent-gateway:local
+    env_file:
+      - path: ./agent-gateway/.env
+        required: false
+    environment:
+      ALDINE_URL: http://app:3000
+      AGENT_GATEWAY_HOST: 0.0.0.0
+      AGENT_GATEWAY_PORT: "3300"
+      AGENT_DATA_DIR: /data
+      TRUST_PROXY: "1"
+    volumes:
+      - aladine-agent:/data
+    networks: [frontend]
+    depends_on: [app]
+    init: true
+    restart: unless-stopped
+
+  front:
+    image: caddy:2-alpine
+    volumes:
+      - ./deploy/agent/Caddyfile:/etc/caddy/Caddyfile:ro
+    ports:
+      - "${ALADINE_BIND:-127.0.0.1}:${ALADINE_PORT:-8080}:80"
+    networks: [frontend]
+    depends_on: [app, gateway]
+    restart: unless-stopped
+
+volumes:
+  aladine-agent:

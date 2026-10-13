@@ -121,6 +121,22 @@ export class FakeAldine implements AldineApi {
     }
   }
 
+  comments: any[] = [];
+  replies: { id: string; body: string }[] = [];
+
+  async listComments() { return structuredClone(this.comments); }
+  async replyComment(_t: string, _p: string, id: string, body: string) {
+    const c = this.comments.find((x) => x.id === id);
+    if (!c) throw new Error('comment not found');
+    c.replies.push({ author: 'Alice (via Paper Assistant)', body });
+    this.replies.push({ id, body });
+  }
+  async resolveComment(_t: string, _p: string, id: string) {
+    const c = this.comments.find((x) => x.id === id);
+    if (!c) throw new Error('comment not found');
+    c.resolved = true;
+  }
+
   binaries: Record<string, { mediaType: string; data: Buffer }> = {
     'figures/robot.png': { mediaType: 'image/png', data: Buffer.from('89504e470d0a1a0a00000000', 'hex') },
   };

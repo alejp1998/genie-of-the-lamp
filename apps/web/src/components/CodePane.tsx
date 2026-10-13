@@ -54,6 +54,8 @@ export interface CodePaneHandle {
   insertAtCursor(text: string): void;
   currentLine(): number | null;
   getSelection(): { from: number; to: number; quote: string } | null;
+  /** The selection with the rest of its first and last lines: what a comment on it is about, in context. */
+  getSelectionLines(): { before: string; quote: string; after: string; fromLine: number } | null;
   /** Cursor position and selection in line terms (1-based lines, 0-based column). */
   getCursorContext(): { line: number; column: number; selection: { text: string; fromLine: number; toLine: number } | null } | null;
   setCommentRanges(ranges: CommentRange[]): void;
@@ -236,6 +238,16 @@ const CodePane = forwardRef<CodePaneHandle, Props>(function CodePane({ projectId
       const sel = view.state.selection.main;
       if (sel.empty) return null;
       return { from: sel.from, to: sel.to, quote: view.state.sliceDoc(sel.from, sel.to) };
+    },
+    getSelectionLines() {
+      const view = viewRef.current;
+      if (!view) return null;
+      const { doc, selection } = view.state;
+      const sel = selection.main;
+      if (sel.empty) return null;
+      const first = doc.lineAt(sel.from);
+      const last = doc.lineAt(sel.to);
+      return { before: doc.sliceString(first.from, sel.from), quote: doc.sliceString(sel.from, sel.to), after: doc.sliceString(sel.to, last.to), fromLine: first.number };
     },
     getCursorContext() {
       const view = viewRef.current;

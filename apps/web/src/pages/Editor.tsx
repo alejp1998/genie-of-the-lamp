@@ -41,6 +41,7 @@ import FilePreview, { PREVIEWABLE } from '../components/FilePreview';
 import { useVirtualDocs, VirtualDocView, VirtualTabs } from '../components/VirtualDocs';
 import { AssistantDock, AssistantToggle, useAssistantDock } from '../assistant/Dock';
 import type { EditorContext } from '../assistant/api';
+import { COMMENT_EVENT } from '../assistant/selectionActions';
 
 type CompileStatus = 'idle' | 'compiling' | 'ok' | 'error';
 
@@ -143,6 +144,7 @@ export default function Editor() {
   const switchMode = (m: EditorMode) => { localStorage.setItem('aldine.editorMode', m); setMode(m); };
   const [comments, setComments] = useState<Comment[]>([]);
   const [composing, setComposing] = useState<{ from: number; to: number; quote: string } | null>(null);
+  const [composeLines, setComposeLines] = useState<{ before: string; after: string; fromLine: number } | null>(null);
   const codeRef = useRef<CodePaneHandle>(null);
   const pdfRef = useRef<PdfPaneHandle>(null);
   const compilingRef = useRef(false);
@@ -627,6 +629,13 @@ export default function Editor() {
   useEffect(() => { loadComments(); }, [id, branch]);
   // live-sync: re-fetch when any collaborator changes comments
   const bumpComments = useCommentSignal(id, branch, loadComments);
+  // Comment changes made outside this page (the assistant replying through the
+  // gateway) reach no signal on their own: reload here and tell every other client.
+  useEffect(() => {
+    const changed = () => { void loadComments(); bumpComments(); };
+    window.addEventListener('aldine:comments-changed', changed);
+    return () => window.removeEventListener('aldine:comments-changed', changed);
+  }, [loadComments, bumpComments]);
   // The file list is a REST snapshot. The server bumps this signal whenever
   // the branch's files change on disk (another tab, a collaborator, the agent
   // API, a pull), and a tab coming back to the foreground refetches anyway.
@@ -717,8 +726,16 @@ export default function Editor() {
     if (!activeFile) return;
     const sel = codeRef.current?.getSelection();
     if (!sel) { toast('Select some text to comment on first.', 'info'); return; }
+    const lines = codeRef.current?.getSelectionLines();
+    setComposeLines(lines ? { before: lines.before, after: lines.after, fromLine: lines.fromLine } : null);
     setComposing(sel);
   }, [activeFile, toast]);
+
+  // The selection toolbar's Comment button (assistant/selectionActions.ts).
+  useEffect(() => {
+    window.addEventListener(COMMENT_EVENT, startComment);
+    return () => window.removeEventListener(COMMENT_EVENT, startComment);
+  }, [startComment]);
 
   const submitComment = useCallback(async (body: string, suggestion?: string) => {
     if (!composing || !activeFile) return;
@@ -926,6 +943,8 @@ export default function Editor() {
     return cmds;
   }, [files, activeFile, id, branch, auto, spellcheck, doCompile, toggleAuto, jumpToPdf, setEngine, setStopOnFirstError, project?.stopOnFirstError, project?.remote, insertAtCursor, loadFiles, loadProject, toast]);
 
+  // Where the assistant answers, it covers what the one-shot "Fix" plugin did.
+  const shownPanels = dock.config ? pluginPanels.filter((p) => p.id !== 'plugin:aifix') : pluginPanels;
   // Images and PDFs in the tree open as previews where the editor would be.
   const previewing = !!activeFile && PREVIEWABLE.test(activeFile) && !!files.find((f) => f.path === activeFile)?.binary;
   const errors = compile.result?.errors?.filter((e) => e.type !== 'typesetting') || [];
@@ -1027,7 +1046,7 @@ export default function Editor() {
             <button className={`sidebar__tab ${tab === 'review' ? 'sidebar__tab--active' : ''}`} onClick={() => setTab('review')} role="tab" data-testid="tab-review">
               Review{comments.some((c) => !c.resolved) ? ` (${comments.filter((c) => !c.resolved).length})` : ''}
             </button>
-            {pluginPanels.map((p) => (
+            {shownPanels.map((p) => (
               <button key={p.id} className={`sidebar__tab ${tab === p.id ? 'sidebar__tab--active' : ''}`} onClick={() => setTab(p.id)} role="tab" data-testid={`tab-${p.id}`}>
                 {p.title}
               </button>
@@ -1098,7 +1117,7 @@ export default function Editor() {
                 onAccept={acceptSuggestion}
               />
             )}
-            {pluginPanels.map((p) => (
+            {shownPanels.map((p) => (
               <div key={p.id} style={{ display: tab === p.id ? 'block' : 'none' }} ref={(el) => { if (el && !el.hasChildNodes()) p.mount(el); }} />
             ))}
           </div>
@@ -1343,7 +1362,7 @@ export default function Editor() {
       <CommandPalette open={paletteOpen} commands={commands} onClose={() => setPaletteOpen(false)} />
 
       {composing && (
-        <CommentComposer quote={composing.quote} onSubmit={submitComment} onClose={() => setComposing(null)} />
+        <CommentComposer quote={composing.quote} context={composeLines ?? undefined} file={activeFile ?? undefined} onSubmit={submitComment} onClose={() => setComposing(null)} />
       )}
 
       {publishOpen && project && (

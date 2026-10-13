@@ -8,9 +8,12 @@ import { decisionsNote } from './patches/apply.ts';
 import type { AldineApi, Identity, ProjectInfo } from './aldine/types.ts';
 import type { Config, ModelRef } from './config.ts';
 import type { ChatMessage, Provider } from './providers/types.ts';
-import type { Run, RunEvent, Session, Store } from './store/types.ts';
+import type { Proposal, Run, RunEvent, Session, Store } from './store/types.ts';
 
 const TEXT_FLUSH_MS = 60;
+/** Runs the assistant may chain on its own (decision → next item) before a person has to write again. */
+const MAX_AUTO_CONTINUES = 20;
+const CONTINUE_TEXT = 'The user reviewed your last proposal (see the note above). Continue with the next item you were working through. If nothing is left, summarize what was done and stop without setting continue_after_review.';
 const TITLE_MAX = 60;
 
 export class BusyError extends Error {}
@@ -28,10 +31,14 @@ export interface StartRun {
   ctx: ClientContext;
   model: ModelRef;
   attachments?: Attachment[];
+  /** Started by the gateway after a review decision, not by a message. */
+  auto?: boolean;
 }
 
 export class RunManager {
   private live = new Map<string, LiveRun>();
+  /** Decisions that arrived while the assistant was still finishing its reply: resumed when that run ends. */
+  private deferred = new Map<string, { proposalId: string; identity: Identity }>();
   private store: Store;
   private aldine: AldineApi;
   private providers: Map<string, Provider>;
@@ -64,7 +71,8 @@ export class RunManager {
     bus.setMaxListeners(100);
     this.live.set(run.id, { controller, bus });
 
-    if (session.title === 'New chat') {
+    if (req.auto) this.store.touchSession(session.id);
+    else if (session.title === 'New chat') {
       const title = req.text.replace(/\s+/g, ' ').trim();
       this.store.updateSession(session.id, { title: title.length > TITLE_MAX ? title.slice(0, TITLE_MAX - 1) + '…' : title || 'New chat' });
     } else this.store.touchSession(session.id);
@@ -118,7 +126,7 @@ export class RunManager {
           ...(note ? [{ type: 'text' as const, text: note, meta: 'context' as const }] : []),
           { type: 'text', text: contextBlock, meta: 'context' },
           ...attached,
-          { type: 'text', text: req.text },
+          req.auto ? { type: 'text', text: req.text, meta: 'context', note: 'continue' } : { type: 'text', text: req.text },
         ],
       };
       this.store.appendMessage(req.session.id, run.id, userMsg);
@@ -172,7 +180,51 @@ export class RunManager {
       this.store.audit({ ...auditBase, action: 'run_finish', status: status === 'done' ? 'ok' : status === 'cancelled' ? 'cancelled' : 'error', detail: { status, usage, error } });
       this.live.delete(run.id);
       bus.emit('close');
+      const waiting = this.deferred.get(req.session.id);
+      if (waiting) {
+        this.deferred.delete(req.session.id);
+        const p = this.store.getProposal(waiting.proposalId);
+        if (p) void this.continueAfter(p, waiting.identity).catch(() => {});
+      }
     }
+  }
+
+  /** Consecutive gateway-started runs since the person last wrote. */
+  private autoChain(sessionId: string): number {
+    let n = 0;
+    for (const m of [...this.store.listMessages(sessionId)].reverse()) {
+      if (m.role !== 'user') continue;
+      if (m.blocks.some((b) => b.type === 'text' && b.note === 'continue')) n++;
+      else if (m.blocks.some((b) => b.type === 'text' && !b.meta)) break;
+    }
+    return n;
+  }
+
+  /**
+   * After a decision on a proposal made with continue_after_review, resume
+   * the assistant on the next item: only for the chat's owner, never while a
+   * run is live or other proposals still wait for review, and at most
+   * MAX_AUTO_CONTINUES times in a row.
+   */
+  async continueAfter(p: Proposal, identity: Identity): Promise<string | null> {
+    if (!p.continueAfterReview || p.continuedRunId) return null;
+    const session = this.store.getSession(p.sessionId);
+    if (!session || session.ownerId !== identity.user.id) return null;
+    if (this.store.countPending(session.id) > 0) return null;
+    const active = this.store.activeRun(session.id);
+    if (active && this.live.has(active.id)) {
+      // The user decided before the reply finished: continue once it has.
+      this.deferred.set(session.id, { proposalId: p.id, identity });
+      return null;
+    }
+    if (this.autoChain(session.id) >= MAX_AUTO_CONTINUES) return null;
+    const project = await this.aldine.project(identity, p.projectId);
+    if (!project) return null;
+    const prev = this.store.getRun(p.runId);
+    const model = this.config.models.find((m) => m.provider === prev?.provider && m.model === prev?.model) ?? this.config.defaultModel;
+    const run = await this.start({ session, identity, project, text: CONTINUE_TEXT, ctx: { branch: p.branch }, model, auto: true });
+    this.store.updateProposal(p.id, { continuedRunId: run.id });
+    return run.id;
   }
 
   cancel(runId: string, byUserId: string, projectId: string): boolean {

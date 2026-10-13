@@ -1,0 +1,20 @@
+# Same-origin front for Aladine: the browser's Aldine session cookie reaches
+# the gateway because both live under one origin.
+{
+	admin off
+}
+
+:80 {
+	encode zstd gzip
+
+	handle /agent-gateway/* {
+		# Runs stream over SSE; flush every event at once.
+		reverse_proxy gateway:3300 {
+			flush_interval -1
+		}
+	}
+
+	handle {
+		reverse_proxy app:3000
+	}
+}

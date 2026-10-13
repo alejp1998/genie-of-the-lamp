@@ -8,7 +8,7 @@ import type { Config, ModelRef } from './config.ts';
 import type { Block } from './providers/types.ts';
 import { acceptProposal, ProposalError, rejectProposal } from './patches/apply.ts';
 import { BusyError, type RunManager } from './runs.ts';
-import type { Session, Store, StoredMessage } from './store/types.ts';
+import type { Proposal, Session, Store, StoredMessage } from './store/types.ts';
 
 declare module 'fastify' {
   interface FastifyRequest { identity: Identity | null }
@@ -278,7 +278,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     const body = AcceptBody.safeParse(req.body ?? {});
     if (!body.success) return reply.code(400).send({ error: `Invalid edit: ${body.error.issues[0]?.message ?? 'bad request'}` });
     try {
-      const proposal = await acceptProposal({ store, aldine, config }, { proposal: found.proposal, session: found.session, identity: req.identity!, parts: body.data });
+      const identity = req.identity!;
+      const onSettled = (p: Proposal) => { runs.continueAfter(p, identity).catch((err) => req.log.warn({ err }, 'continue after review failed')); };
+      const proposal = await acceptProposal({ store, aldine, config, onSettled }, { proposal: found.proposal, session: found.session, identity, parts: body.data });
       return { proposal };
     } catch (err) {
       if (err instanceof ProposalError) return reply.code(err.status).send({ error: err.message });
@@ -291,7 +293,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     const found = await proposalFor(req, reply, req.params.id, 'own');
     if (!found) return;
     try {
-      return { proposal: rejectProposal(store, { proposal: found.proposal, session: found.session, identity: req.identity! }) };
+      const rejected = rejectProposal(store, { proposal: found.proposal, session: found.session, identity: req.identity! });
+      await runs.continueAfter(rejected, req.identity!).catch((err) => req.log.warn({ err }, 'continue after review failed'));
+      return { proposal: store.getProposal(rejected.id) };
     } catch (err) {
       if (err instanceof ProposalError) return reply.code(err.status).send({ error: err.message });
       throw err;

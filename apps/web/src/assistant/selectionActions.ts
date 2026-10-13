@@ -11,6 +11,9 @@ export interface AssistantPrompt {
   selection?: { text: string; fromLine: number; toLine: number };
 }
 
+/** Starts a review comment on the selection (the editor page opens its composer). */
+export const COMMENT_EVENT = 'aldine:comment-selection';
+
 export function askAssistant(p: AssistantPrompt) {
   window.dispatchEvent(new CustomEvent<AssistantPrompt>(PROMPT_EVENT, { detail: p }));
 }
@@ -27,8 +30,8 @@ const MIN_SELECTION = 3;
 
 function selectionTooltip(state: EditorState): Tooltip | null {
   const sel = state.selection.main;
-  if (sel.empty || sel.to - sel.from < MIN_SELECTION) return null;
-  if (typeof document === 'undefined' || document.documentElement.dataset.assistant !== '1') return null;
+  if (sel.empty || sel.to - sel.from < MIN_SELECTION || typeof document === 'undefined') return null;
+  const assistant = document.documentElement.dataset.assistant === '1';
   return {
     pos: sel.head,
     above: sel.head < sel.anchor || state.doc.lineAt(sel.head).number === 1 ? false : true,
@@ -37,8 +40,21 @@ function selectionTooltip(state: EditorState): Tooltip | null {
       const dom = document.createElement('div');
       dom.className = 'assistant-sel';
       dom.setAttribute('role', 'toolbar');
-      dom.setAttribute('aria-label', 'Ask the assistant about the selection');
+      dom.setAttribute('aria-label', 'Act on the selection');
       dom.dataset.testid = 'selection-actions';
+      // Commenting is Aldine's own review feature: offered with or without an assistant.
+      const comment = document.createElement('button');
+      comment.type = 'button';
+      comment.textContent = 'Comment';
+      comment.className = 'assistant-sel__btn assistant-sel__btn--comment';
+      comment.dataset.testid = 'sel-comment';
+      comment.addEventListener('mousedown', (e) => e.preventDefault());
+      comment.addEventListener('click', () => window.dispatchEvent(new Event(COMMENT_EVENT)));
+      dom.appendChild(comment);
+      if (!assistant) return { dom };
+      const sep = document.createElement('span');
+      sep.className = 'assistant-sel__sep';
+      dom.appendChild(sep);
       for (const a of ACTIONS) {
         const b = document.createElement('button');
         b.type = 'button';
@@ -63,7 +79,7 @@ function selectionTooltip(state: EditorState): Tooltip | null {
   };
 }
 
-/** A small toolbar over the selection; present only where an Agent Gateway answers. */
+/** A small toolbar over the selection: Comment always, the assistant's actions where a gateway answers. */
 export const assistantSelectionActions = StateField.define<Tooltip | null>({
   create: selectionTooltip,
   update(value, tr) {

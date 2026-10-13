@@ -4,7 +4,7 @@ import { withBase } from '../basePath';
 export const GATEWAY = '/agent-gateway';
 
 export type Block =
-  | { type: 'text'; text: string; meta?: 'context' | 'attachment'; attachment?: { kind: 'file' | 'text'; name: string; path?: string } }
+  | { type: 'text'; text: string; meta?: 'context' | 'attachment'; attachment?: { kind: 'file' | 'text'; name: string; path?: string }; note?: 'continue' }
   | { type: 'image'; mediaType: string; name?: string; ref: string }
   | { type: 'document'; mediaType: string; name?: string; ref: string; hasText?: boolean }
   | { type: 'tool_call'; id: string; name: string; input: unknown }
@@ -72,6 +72,9 @@ export interface Proposal {
   reason: string | null;
   decidedByName: string | null;
   compile: { ok: boolean; errorsTotal: number; errors: { file: string | null; line: number | null; message: string }[]; timedOut?: boolean } | null;
+  resolves?: { commentId: string; reply: string; author: string; quote: string; done?: boolean; error?: string }[];
+  continueAfterReview?: boolean;
+  continuedRunId?: string | null;
 }
 
 export interface AcceptParts {

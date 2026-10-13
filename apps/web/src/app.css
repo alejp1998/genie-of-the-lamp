@@ -308,6 +308,18 @@
 
 /* comment composer */
 .composer__quote { margin: 0 0 12px; padding: 8px 12px; border-left: 3px solid var(--accent); background: var(--bg-inset); border-radius: 0 var(--radius-s) var(--radius-s) 0; color: var(--text-2); font-size: var(--text-s); max-height: 84px; overflow-y: auto; white-space: pre-wrap; }
+.composer__head { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; flex-wrap: wrap; }
+.composer__head h2 { margin: 0; }
+.composer__file { color: var(--text-3); font: var(--text-xs) var(--font-mono); }
+.composer__preview { margin: 0 0 12px; border: 1px solid var(--hairline); border-radius: var(--radius-m); overflow: hidden; }
+.composer__preview .code-pane { display: block; flex: none; height: auto; max-height: 45vh; overflow: auto; }
+/* fit the excerpt: .code-pane fills its pane in the editor, here it sizes to its lines */
+.composer__preview .code-pane .cm-editor { height: auto; max-height: 45vh; }
+/* the editor pads 40vh so its last line can scroll up; an excerpt has nothing to scroll to */
+.composer__preview .code-pane .cm-content { padding-bottom: 4px; }
+.cm-commentTarget { background: color-mix(in srgb, var(--accent) 22%, transparent); box-shadow: inset 0 -2px 0 var(--accent); border-radius: 2px; }
+/* the selection toolbar would float over the dialog that its Comment button opened */
+body:has(.modal-backdrop) .assistant-sel { display: none; }
 .composer__body { width: 100%; min-height: 72px; resize: vertical; font-family: inherit; line-height: 1.5; margin-bottom: 8px; }
 .composer__suggest { padding-left: 0; color: var(--accent); }
 .composer__hint { font-size: var(--text-xs); opacity: 0.6; margin-left: 4px; }

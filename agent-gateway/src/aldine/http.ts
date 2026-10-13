@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import { type AldineApi, AldineToolError, type Identity, type ProjectInfo, type ToolCallOptions } from './types.ts';
+import { type AldineApi, AldineToolError, type Identity, type ProjectInfo, type ReviewComment, type ToolCallOptions } from './types.ts';
 
 const SESSION_COOKIE = 'aldine_session';
 const IDENTITY_TTL_MS = 10_000;
@@ -161,6 +161,24 @@ export class HttpAldine implements AldineApi {
     const text: string = first ? (first as { text: string }).text : '';
     if (result.isError) throw new AldineToolError(text || `${name} failed`);
     try { return JSON.parse(text); } catch { return text; }
+  }
+
+  async listComments(token: string, projectId: string, branch: string): Promise<ReviewComment[]> {
+    const res = await this.rest(`/api/projects/${encodeURIComponent(projectId)}/comments?branch=${encodeURIComponent(branch)}`, { token });
+    if (!res.ok) throw new Error(`Aldine comments answered ${res.status}`);
+    return res.json() as Promise<ReviewComment[]>;
+  }
+
+  async replyComment(token: string, projectId: string, commentId: string, body: string): Promise<void> {
+    const res = await this.rest(`/api/projects/${encodeURIComponent(projectId)}/comments/${encodeURIComponent(commentId)}/reply`, {
+      method: 'POST', token, headers: { 'x-aldine-agent-label': this.opts.agentLabel }, body: JSON.stringify({ body }),
+    });
+    if (!res.ok) throw new Error(`Aldine refused the reply (${res.status})`);
+  }
+
+  async resolveComment(token: string, projectId: string, commentId: string): Promise<void> {
+    const res = await this.rest(`/api/projects/${encodeURIComponent(projectId)}/comments/${encodeURIComponent(commentId)}/resolve`, { method: 'POST', token, body: JSON.stringify({ resolved: true }) });
+    if (!res.ok) throw new Error(`Aldine refused to resolve the comment (${res.status})`);
   }
 
   async readBinary(token: string, projectId: string, branch: string, path: string): Promise<{ mediaType: string; data: Buffer } | null> {

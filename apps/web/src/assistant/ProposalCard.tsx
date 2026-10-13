@@ -76,6 +76,17 @@ export default function ProposalCard({ proposal: p, canDecide, onAccept, onRejec
         <span className="proposal__stats"><span className="proposal__add">+{p.added}</span> <span className="proposal__del">−{p.removed}</span></span>
       </div>
       <div className="proposal__summary">{p.summary}</div>
+      {p.resolves?.map((r) => (
+        <div key={r.commentId} className="proposal__comment" data-testid="proposal-comment">
+          <div className="proposal__comment-head">
+            Answers <strong>{r.author}</strong>’s comment on <q>{r.quote.length > 80 ? `${r.quote.slice(0, 79)}…` : r.quote}</q>
+            {r.done && <span className="proposal__comment-done" data-testid="proposal-comment-done"> · replied and resolved</span>}
+            {r.error && <span className="proposal__err"> · {r.error}</span>}
+          </div>
+          <div className="proposal__reply">Reply: {r.reply}</div>
+        </div>
+      ))}
+      {p.continueAfterReview && p.status === 'pending' && <div className="proposal__note">The assistant continues with the next item after you decide.</div>}
 
       {showDiff && !editing && (
         <div className="proposal__diff" data-testid="proposal-diff">

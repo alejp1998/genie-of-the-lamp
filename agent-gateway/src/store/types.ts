@@ -91,6 +91,12 @@ export interface Proposal {
   compile: CompileOutcome | null;
   /** Whether the model has been told the decision (at the start of its next run). */
   noted: boolean;
+  /** Review comments this change answers: on Accept each gets the reply and is resolved. */
+  resolves?: { commentId: string; reply: string; author: string; quote: string; done?: boolean; error?: string }[];
+  /** Working through a list: after the user decides, the assistant continues on its own. */
+  continueAfterReview?: boolean;
+  /** The run that continued after this decision. */
+  continuedRunId?: string | null;
 }
 
 export interface AuditEntry {
@@ -137,7 +143,7 @@ export interface Store {
   /** Tool activity, notices and errors across a session's runs (no text deltas), for rendering history. */
   listSessionActivity(sessionId: string): RunEvent[];
 
-  createProposal(p: Omit<Proposal, 'createdAt' | 'decidedBy' | 'decidedByName' | 'decidedAt' | 'commit' | 'author' | 'edited' | 'reason' | 'compile' | 'noted' | 'status'>): Proposal;
+  createProposal(p: Omit<Proposal, 'createdAt' | 'decidedBy' | 'decidedByName' | 'decidedAt' | 'commit' | 'author' | 'edited' | 'reason' | 'compile' | 'noted' | 'status' | 'continuedRunId'>): Proposal;
   getProposal(id: string): Proposal | null;
   listProposals(sessionId: string): Proposal[];
   updateProposal(id: string, patch: Partial<Omit<Proposal, 'id' | 'sessionId' | 'runId' | 'projectId'>>): Proposal | null;

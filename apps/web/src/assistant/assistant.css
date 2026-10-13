@@ -262,5 +262,13 @@
   box-shadow: var(--shadow-pop); font-family: var(--font-ui);
 }
 .assistant-sel__btn { height: 24px; padding: 0 8px; border: 0; border-radius: var(--radius-s); background: none; color: var(--text); font: 500 var(--text-xs) var(--font-ui); cursor: pointer; white-space: nowrap; }
-.assistant-sel__btn:first-child { color: var(--agent); font-weight: 600; }
+.assistant-sel__sep { width: 1px; margin: 4px 2px; background: var(--hairline-strong); }
+.assistant-sel__sep + .assistant-sel__btn { color: var(--agent); font-weight: 600; }
 .assistant-sel__btn:hover { background: var(--bg-hover); }
+
+.assistant__notice--info { color: var(--text-3); font-size: var(--text-xs); padding: 0; text-align: center; }
+.proposal__comment { border-left: 2px solid var(--hairline-strong); padding: 2px 0 2px 8px; display: flex; flex-direction: column; gap: 2px; }
+.proposal__comment-head { color: var(--text-2); }
+.proposal__comment-head q { font-style: italic; }
+.proposal__comment-done { color: var(--ok-text); }
+.proposal__reply { color: var(--text); }

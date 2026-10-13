@@ -28,6 +28,7 @@ const SUGGESTIONS = [
   'Why does the document fail to compile?',
   'Summarize the open file in three sentences.',
   'Find terms used inconsistently across sections.',
+  'Handle the open review comments one by one.',
 ];
 
 function relTime(iso: string): string {

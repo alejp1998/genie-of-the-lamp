@@ -18,6 +18,19 @@ export interface ProjectInfo {
   branches: string[];
 }
 
+export interface ReviewComment {
+  id: string;
+  branch: string;
+  file: string;
+  anchor: { from: number; to: number; quote: string };
+  author: string;
+  body: string;
+  suggestion?: string;
+  resolved: boolean;
+  createdAt: string;
+  replies: { author: string; body: string; createdAt?: string }[];
+}
+
 export interface ToolCallOptions {
   signal?: AbortSignal;
   timeoutMs?: number;
@@ -41,6 +54,11 @@ export interface AldineApi {
   credential(identity: Identity, projectId: string): Promise<string>;
   callTool(token: string, name: string, args: Record<string, unknown>, opts?: ToolCallOptions): Promise<any>;
   compileStatus(token: string, projectId: string, branch: string): Promise<any>;
+  /** Review comments on a branch (Aldine's Review tab). */
+  listComments(token: string, projectId: string, branch: string): Promise<ReviewComment[]>;
+  /** Posts a reply as "<user> (via <agent label>)". */
+  replyComment(token: string, projectId: string, commentId: string, body: string): Promise<void>;
+  resolveComment(token: string, projectId: string, commentId: string): Promise<void>;
   /** A project file's bytes (images for view_image); null when it does not exist. */
   readBinary(token: string, projectId: string, branch: string, path: string): Promise<{ mediaType: string; data: Buffer } | null>;
 }

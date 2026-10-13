@@ -29,7 +29,7 @@ export type Item =
   | { kind: 'user'; key: string; text: string; attachments?: ItemAttachment[]; context?: string }
   | { kind: 'assistant'; key: string; text: string }
   | { kind: 'tool'; key: string; id: string; name: string; activity: string; summary?: string; ok?: boolean; running: boolean; input?: unknown; output?: string; images?: string[] }
-  | { kind: 'notice'; key: string; level: 'warn' | 'error'; message: string };
+  | { kind: 'notice'; key: string; level: 'warn' | 'error' | 'info'; message: string };
 
 const userText = (m: ChatMessage) => m.blocks
   .filter((b): b is { type: 'text'; text: string } => b.type === 'text' && !(b as { meta?: string }).meta)
@@ -73,6 +73,10 @@ export function buildTranscript(messages: ChatMessage[], activity: RunEvent[], s
         if (b.type !== 'tool_result') continue;
         const t = tools.get(b.id);
         if (t) { t.output = b.content; t.ok = t.ok ?? !b.isError; t.running = false; if (b.images?.length) t.images = b.images.map((im) => gateway.blockUrl(im.ref)); }
+      }
+      if (m.blocks.some((b) => b.type === 'text' && (b as { note?: string }).note === 'continue')) {
+        items.push({ kind: 'notice', key: `c${m.id}`, level: 'info', message: 'Continued after your review' });
+        continue;
       }
       const text = userText(m);
       const attachments = attachmentsOf(m);
