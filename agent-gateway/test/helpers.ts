@@ -108,6 +108,12 @@ export class FakeAldine implements AldineApi {
         this.head = hash;
         return { ok: true, paths: Object.keys(next), contentVersion: this.contentVersion, commit: hash, branch: head.branch, head: hash };
       }
+      case 'references_add': {
+        const q = String(args.query);
+        this.refsAdded.push(q);
+        if (q === 'fail') throw new AldineToolError('lookup failed');
+        return { key: `ref${this.refsAdded.length}`, bibFile: args.bibFile ?? 'refs.bib', duplicate: false, created: false, ...head };
+      }
       case 'compile':
         return this.compileOk
           ? { ok: true, errors: [], errorsTotal: 0, warningsTotal: 0, durationMs: 1800, pages: 2, ...head }
@@ -122,6 +128,7 @@ export class FakeAldine implements AldineApi {
   }
 
   comments: any[] = [];
+  refsAdded: string[] = [];
   replies: { id: string; body: string }[] = [];
 
   async listComments() { return structuredClone(this.comments); }
@@ -153,6 +160,8 @@ export class FakeAldine implements AldineApi {
 export function testConfig(overrides: Partial<Config['limits']> = {}): Config {
   const c = loadConfig({ AGENT_ENABLE_MOCK: '1', AGENT_DEFAULT_PROVIDER: 'mock', AGENT_GATEWAY_BASE_PATH: '/agent-gateway' });
   c.limits = { ...c.limits, ...overrides };
+  // No network in unit tests: research tests build their own config against a local mock.
+  c.research = { ...c.research, enabled: false };
   return c;
 }
 

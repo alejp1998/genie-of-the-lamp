@@ -93,6 +93,8 @@ export interface Proposal {
   noted: boolean;
   /** Review comments this change answers: on Accept each gets the reply and is resolved. */
   resolves?: { commentId: string; reply: string; author: string; quote: string; done?: boolean; error?: string }[];
+  /** References to add on Accept, by DOI or arXiv id; Aldine writes the BibTeX from the record. */
+  references?: { id: string; title?: string; authors?: string[]; year?: number | null; venue?: string | null; bibFile?: string; key?: string; duplicate?: boolean; error?: string }[];
   /** Working through a list: after the user decides, the assistant continues on its own. */
   continueAfterReview?: boolean;
   /** The run that continued after this decision. */

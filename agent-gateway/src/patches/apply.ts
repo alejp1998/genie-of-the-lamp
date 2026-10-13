@@ -106,9 +106,24 @@ export async function acceptProposal(deps: AcceptDeps, args: { proposal: Proposa
       return p;
     };
 
-    // A reply-only answer to review comments writes no files.
+    // References first: Aldine resolves each DOI/arXiv id to BibTeX and commits it (as the agent label).
+    let references = proposal.references;
+    if (references?.length) {
+      references = [];
+      for (const r of proposal.references!) {
+        try {
+          const res = await aldine.callTool(token, 'references_add', { project: proposal.projectId, branch: proposal.branch, query: r.id, ...(r.bibFile ? { bibFile: r.bibFile } : {}) }, { timeoutMs: 60_000 });
+          references.push({ ...r, key: res.key, bibFile: res.bibFile, duplicate: !!res.duplicate });
+        } catch (err) {
+          references.push({ ...r, error: (err as Error).message });
+        }
+      }
+      store.updateProposal(proposal.id, { references });
+    }
+
+    // A reply-only answer to review comments (or references only) writes no other files.
     if (!changes.length) {
-      const applied = store.updateProposal(proposal.id, { status: 'applied', edited, decidedBy: identity.user.id, decidedByName: identity.user.name, decidedAt: new Date().toISOString(), reason: null })!;
+      const applied = store.updateProposal(proposal.id, { status: 'applied', edited, references, decidedBy: identity.user.id, decidedByName: identity.user.name, decidedAt: new Date().toISOString(), reason: null })!;
       const done = await answerComments(deps, token, applied, null);
       audit('proposal_accept', 'ok', { proposal: proposal.id, comments: done.resolves?.map((r) => r.commentId) });
       deps.onSettled?.(done);
@@ -244,7 +259,8 @@ export function decisionsNote(decided: Proposal[]): string | null {
       const compile = !p.compile ? 'the compile afterwards had not finished'
         : p.compile.ok ? 'the document compiled afterwards'
           : `the compile afterwards failed with ${p.compile.errorsTotal} error(s): ${p.compile.errors.slice(0, 3).map((e) => `${e.file ?? '?'}:${e.line ?? '?'} ${e.message}`).join('; ')}`;
-      const answered = p.resolves?.length ? ` Replied to and resolved ${p.resolves.filter((r) => r.done).length} of ${p.resolves.length} review comment(s).` : '';
+      const answered = (p.resolves?.length ? ` Replied to and resolved ${p.resolves.filter((r) => r.done).length} of ${p.resolves.length} review comment(s).` : '')
+        + (p.references?.length ? ` References: ${p.references.map((r) => (r.key ? `\\cite{${r.key}} = ${r.id}${r.duplicate ? ' (already in the bibliography)' : ''}` : `${r.id} failed (${r.error})`)).join('; ')}.` : '');
       if (!p.changes?.length) return `- ${what}: accepted.${answered}`;
       return `- ${what}: accepted${p.edited ? ' after the user edited it' : ''}, committed as ${p.commit ?? '(no commit)'}; ${compile}.${answered}`;
     }

@@ -14,6 +14,8 @@ export interface ToolContext {
   signal: AbortSignal;
   limits: Limits;
   state: RunState;
+  /** Literature, web search and page reading; absent or disabled = no research tools. */
+  research?: import('../research/sources.ts').ResearchConfig;
   /** Stores a reviewable proposal for this run; absent where proposals are not offered. */
   propose?: (draft: ProposalDraft) => Proposal;
 }
@@ -27,6 +29,7 @@ export interface ProposalDraft {
   removed: number;
   base: Proposal['base'];
   resolves?: Proposal['resolves'];
+  references?: Proposal['references'];
   continueAfterReview?: boolean;
   /** Filled by the store hook: earlier pending proposals this one replaced. */
   replaced?: string[];
@@ -58,6 +61,8 @@ export interface AgentTool<I = any> {
   activity(input: I): string;
   /** One-line outcome shown when it finishes. */
   summarize(result: any): string;
+  /** Papers and pages this result is based on, for the panel's source cards. */
+  sources?(result: any): unknown[];
   run(input: I, ctx: ToolContext, call: { id: string }): Promise<unknown>;
 }
 
@@ -344,18 +349,36 @@ export const proposePatch = tool({
   schema: z.object({
     summary: z.string().min(1).max(160).describe('One line, imperative, e.g. "Close the parenthesis in the update rule"'),
     changes: z.array(ChangeInput).max(10),
+    add_references: z.array(z.object({
+      id: z.string().min(3).max(300).describe('DOI (10.xxxx/…) or arXiv id of a work you found with search_literature or get_paper'),
+      bib_file: z.string().max(500).optional().describe('Target .bib; default: the project\'s references.bib'),
+    }).strict()).max(10).optional().describe('Add these works to the bibliography on Accept (BibTeX is generated from the DOI/arXiv record, never typed). The \\cite keys are reported after acceptance; cite them in a follow-up proposal.'),
     resolves: z.array(z.object({
       comment_id: z.string().min(1).max(100),
       reply: z.string().min(1).max(2000).describe('Posted on the thread when the user accepts, e.g. what changed and why'),
     }).strict()).max(10).optional(),
     continue_after_review: z.boolean().optional().describe('True while working through a list (e.g. review comments): after Accept or Reject you continue with the next item'),
   }).strict(),
-  activity: (i) => (i.changes.length ? `Proposing changes to ${[...new Set(i.changes.map((c) => c.path))].join(', ')}…` : 'Drafting a reply to a review comment…'),
-  summarize: (r) => (r.files.length ? `Proposed changes to ${r.files.join(', ')} (+${r.added} −${r.removed})` : `Proposed a reply to ${r.resolves_comments?.length ?? 0} review comment(s)`),
+  activity: (i) => (i.changes.length ? `Proposing changes to ${[...new Set(i.changes.map((c) => c.path))].join(', ')}…` : i.add_references?.length ? 'Checking the references…' : 'Drafting a reply to a review comment…'),
+  summarize: (r) => (r.files.length ? `Proposed changes to ${r.files.join(', ')} (+${r.added} −${r.removed})` : r.references?.length ? `Proposed adding ${r.references.length} reference${r.references.length === 1 ? '' : 's'}` : `Proposed a reply to ${r.resolves_comments?.length ?? 0} review comment(s)`),
   async run(input, ctx, call) {
     if (!ctx.propose) throw new Error('Proposals are not available in this context.');
     if (ctx.state.proposals >= MAX_PROPOSALS_PER_RUN) throw new Error(`At most ${MAX_PROPOSALS_PER_RUN} proposals per request; wait for the user to review the ones you made.`);
-    if (!input.changes.length && !input.resolves?.length) throw new Error('A proposal needs changes, or resolves for a reply-only answer to review comments.');
+    if (!input.changes.length && !input.resolves?.length && !input.add_references?.length) throw new Error('A proposal needs changes, add_references, or resolves for a reply-only answer to review comments.');
+    let references: Proposal['references'];
+    if (input.add_references?.length) {
+      references = [];
+      for (const r of input.add_references) {
+        let meta: { title?: string; authors?: string[]; year?: number | null; venue?: string | null } = {};
+        if (ctx.research?.enabled) {
+          const { resolveWork } = await import('./researchTools.ts');
+          const w = await resolveWork(ctx.research, r.id, ctx.signal).catch(() => null);
+          if (!w) throw new Error(`Could not find ${r.id} in OpenAlex or arXiv; check the DOI or arXiv id (use search_literature).`);
+          meta = { title: w.title, authors: w.authors.slice(0, 6), year: w.year, venue: w.venue };
+        }
+        references.push({ id: r.id, ...meta, ...(r.bib_file ? { bibFile: r.bib_file } : {}) });
+      }
+    }
     let resolves: Proposal['resolves'];
     if (input.resolves?.length) {
       const all = await ctx.aldine.listComments(ctx.token, ctx.projectId, ctx.branch);
@@ -401,7 +424,7 @@ export const proposePatch = tool({
         added += d.added;
       }
     }
-    const draft: ProposalDraft = { toolCallId: call.id, summary: input.summary, changes, diff: patches.join(''), added, removed, base: { head, versions }, resolves, continueAfterReview: !!input.continue_after_review };
+    const draft: ProposalDraft = { toolCallId: call.id, summary: input.summary, changes, diff: patches.join(''), added, removed, base: { head, versions }, resolves, references, continueAfterReview: !!input.continue_after_review };
     const p = ctx.propose(draft);
     ctx.state.proposals++;
     return {
@@ -409,6 +432,7 @@ export const proposePatch = tool({
       status: 'awaiting_review',
       files: changes.map((c) => c.path),
       ...(resolves?.length ? { resolves_comments: resolves.map((r) => r.commentId) } : {}),
+      ...(references?.length ? { references: references.map((r) => ({ id: r.id, title: r.title })) } : {}),
       added,
       removed,
       ...(draft.replaced?.length ? { replaced: draft.replaced.map((id) => id.slice(0, 8)) } : {}),

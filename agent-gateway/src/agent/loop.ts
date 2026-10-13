@@ -80,7 +80,9 @@ async function executeCall(call: Extract<Block, { type: 'tool_call' }>, d: LoopD
     const media = isMediaResult(result) ? result : null;
     const content = media ? media.text : clip(JSON.stringify(result), d.limits.maxToolResultChars);
     const durationMs = Date.now() - started;
-    d.emit('tool_end', { id: call.id, name: tool.name, ok: true, summary: tool.summarize(result), durationMs, output: clip(content, 4000), ...(media ? { images: media.images.length } : {}) });
+    let sources: unknown[] = [];
+    try { sources = tool.sources?.(result) ?? []; } catch { /* sources are a convenience */ }
+    d.emit('tool_end', { id: call.id, name: tool.name, ok: true, summary: tool.summarize(result), durationMs, output: clip(content, 4000), ...(media ? { images: media.images.length } : {}), ...(sources.length ? { sources } : {}) });
     d.audit({ action: 'tool_call', tool: tool.name, argsHash: argsHash(parsed.data), status: 'ok', durationMs });
     return { type: 'tool_result', id: call.id, content, ...(media ? { images: media.images } : {}) };
   } catch (err) {

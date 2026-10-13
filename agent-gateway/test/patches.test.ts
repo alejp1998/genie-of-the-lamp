@@ -300,3 +300,16 @@ test('a decision made while the reply is still streaming continues once the run 
   const later = await waitFor(async () => store.getProposal(p.id)!, (x) => !!x.continuedRunId, 3000);
   assert.ok(later.continuedRunId);
 });
+
+test('add_references: listed on the card, added through Aldine on Accept, keys reported to the model', async () => {
+  aldine.refsAdded = [];
+  const { proposal } = await propose({ summary: 'Add two references', changes: [], add_references: [{ id: '10.1186/s41018-018-0045-4' }, { id: 'fail' }] });
+  assert.deepEqual(proposal.references!.map((r) => r.id), ['10.1186/s41018-018-0045-4', 'fail']);
+  const res = await j(await fetch(`${gw}/proposals/${proposal.id}/accept`, as('alice', { method: 'POST', body: '{}' })));
+  assert.equal(res.proposal.status, 'applied');
+  assert.deepEqual(aldine.refsAdded, ['10.1186/s41018-018-0045-4', 'fail']);
+  assert.equal(res.proposal.references[0].key, 'ref1');
+  assert.match(res.proposal.references[1].error, /lookup failed/);
+  const { decisionsNote } = await import('../src/patches/apply.ts');
+  assert.match(decisionsNote([res.proposal])!, /References: \\cite\{ref1\} = 10\.1186\/s41018-018-0045-4; fail failed \(lookup failed\)/);
+});

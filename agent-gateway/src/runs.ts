@@ -3,6 +3,7 @@ import { EventEmitter } from 'node:events';
 import { type Attachment, attachmentBlocks, buildContextBlock, type ClientContext } from './agent/context.ts';
 import { runLoop } from './agent/loop.ts';
 import { systemPrompt } from './agent/prompt.ts';
+import { researchTools } from './agent/researchTools.ts';
 import { type AgentTool, ASSISTANT_TOOLS, newRunState, readFresh } from './agent/tools.ts';
 import { decisionsNote } from './patches/apply.ts';
 import type { AldineApi, Identity, ProjectInfo } from './aldine/types.ts';
@@ -50,7 +51,7 @@ export class RunManager {
     this.aldine = deps.aldine;
     this.providers = deps.providers;
     this.config = deps.config;
-    this.tools = deps.tools ?? ASSISTANT_TOOLS;
+    this.tools = deps.tools ?? [...ASSISTANT_TOOLS, ...researchTools(deps.config.research)];
   }
 
   isLive(runId: string): boolean { return this.live.has(runId); }
@@ -140,6 +141,7 @@ export class RunManager {
         tools: this.tools,
         toolCtx: {
           aldine: this.aldine, token, projectId: req.project.id, branch: req.ctx.branch, signal: controller.signal, limits: this.config.limits, state: newRunState(),
+          research: this.config.research,
           propose: (draft) => {
             const p = this.store.createProposal({ ...draft, id: crypto.randomUUID(), sessionId: req.session.id, runId: run.id, projectId: req.project.id, branch: req.ctx.branch, provider: run.provider, model: run.model });
             // A newer proposal for the same files replaces undecided older ones: the user reviews one version, not a queue.

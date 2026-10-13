@@ -1,4 +1,5 @@
 import path from 'node:path';
+import type { ResearchConfig } from './research/sources.ts';
 
 export type ProviderKind = 'anthropic' | 'openai' | 'mock';
 
@@ -50,6 +51,7 @@ export interface Config {
   defaultModel: ModelRef;
   effort: Effort;
   limits: Limits;
+  research: ResearchConfig;
 }
 
 const int = (v: string | undefined, d: number) => {
@@ -140,6 +142,15 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     models,
     defaultModel,
     effort,
+    research: {
+      enabled: env.AGENT_RESEARCH !== '0',
+      email: env.AGENT_RESEARCH_EMAIL || null,
+      openalexBase: (env.OPENALEX_BASE_URL || 'https://api.openalex.org').replace(/\/+$/, ''),
+      arxivBase: (env.ARXIV_BASE_URL || 'https://export.arxiv.org/api').replace(/\/+$/, ''),
+      searxngUrl: env.SEARXNG_URL || null,
+      fetchEnabled: env.AGENT_FETCH !== '0',
+      allowPrivate: env.AGENT_RESEARCH_ALLOW_PRIVATE === '1',
+    },
     limits: {
       maxIterations: int(env.AGENT_MAX_ITERATIONS, 12),
       runTimeoutMs: int(env.AGENT_RUN_TIMEOUT_MS, 5 * 60_000),

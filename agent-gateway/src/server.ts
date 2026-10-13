@@ -124,6 +124,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     models: config.models.map((m) => ({ id: modelId(m), label: m.label, provider: m.provider })),
     defaultModel: modelId(config.defaultModel),
     limits: { maxMessageChars: config.limits.maxMessageChars, maxIterations: config.limits.maxIterations },
+    research: { literature: config.research.enabled, web: config.research.enabled && !!config.research.searxngUrl, fetch: config.research.enabled && config.research.fetchEnabled },
   }));
 
   app.get<{ Params: { pid: string } }>(`${base}/projects/:pid/sessions`, async (req, reply) => {
