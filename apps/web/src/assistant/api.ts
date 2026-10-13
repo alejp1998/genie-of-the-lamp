@@ -60,7 +60,7 @@ export interface Proposal {
   sessionId: string;
   runId: string;
   toolCallId: string;
-  status: 'pending' | 'applying' | 'applied' | 'rejected' | 'stale' | 'failed';
+  status: 'pending' | 'applying' | 'applied' | 'rejected' | 'stale' | 'failed' | 'superseded';
   summary: string;
   changes: ProposalChange[];
   diff: string;

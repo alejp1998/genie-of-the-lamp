@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import DiffView from '../components/DiffView';
+import WordDiffView from '../components/WordDiffView';
 import { openVirtualDoc } from '../components/VirtualDocs';
 import type { AcceptParts, Proposal } from './api';
 
@@ -62,6 +63,7 @@ function EditForm({ proposal, onCancel, onSubmit }: { proposal: Proposal; onCanc
 export default function ProposalCard({ proposal: p, canDecide, onAccept, onReject, onAsk, onShowHistory }: Props) {
   const [showDiff, setShowDiff] = useState(p.status === 'pending');
   const [editing, setEditing] = useState(false);
+  const [byWord, setByWord] = useState(true);
   const [busy, setBusy] = useState(false);
   const run = async (fn: () => Promise<void>) => { setBusy(true); try { await fn(); } finally { setBusy(false); } };
   const pending = p.status === 'pending';
@@ -75,7 +77,15 @@ export default function ProposalCard({ proposal: p, canDecide, onAccept, onRejec
       </div>
       <div className="proposal__summary">{p.summary}</div>
 
-      {showDiff && !editing && <div className="proposal__diff" data-testid="proposal-diff"><DiffView patch={p.diff} /></div>}
+      {showDiff && !editing && (
+        <div className="proposal__diff" data-testid="proposal-diff">
+          <div className="seg proposal__seg" role="tablist" aria-label="Diff view">
+            <button role="tab" aria-selected={byWord} className={`seg__btn${byWord ? ' seg__btn--active' : ''}`} onClick={() => setByWord(true)} data-testid="proposal-diff-words">Words</button>
+            <button role="tab" aria-selected={!byWord} className={`seg__btn${!byWord ? ' seg__btn--active' : ''}`} onClick={() => setByWord(false)} data-testid="proposal-diff-lines">Lines</button>
+          </div>
+          {byWord ? <WordDiffView patch={p.diff} /> : <DiffView patch={p.diff} />}
+        </div>
+      )}
       {editing && (
         <EditForm proposal={p} onCancel={() => setEditing(false)} onSubmit={(parts) => { setEditing(false); void run(() => onAccept(parts)); }} />
       )}
@@ -117,6 +127,7 @@ export default function ProposalCard({ proposal: p, canDecide, onAccept, onRejec
         </div>
       )}
       {p.status === 'rejected' && <div className="proposal__status" data-testid="proposal-rejected">Rejected. The document is unchanged.</div>}
+      {p.status === 'superseded' && <div className="proposal__status" data-testid="proposal-superseded">Replaced by a newer proposal below. The document is unchanged.</div>}
       {(p.status === 'stale' || p.status === 'failed') && (
         <div className="proposal__status proposal__status--warn" data-testid="proposal-stale">
           <div>Not applied: {p.reason}</div>

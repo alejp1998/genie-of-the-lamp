@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import DiffView from './DiffView';
+import WordDiffView from './WordDiffView';
 import { MediaView } from './FilePreview';
 import { IconX } from './Icons';
 import ReadOnlyCode from './ReadOnlyCode';
@@ -76,6 +77,7 @@ export function VirtualTabs({ fileLabel, docs, current, onShow, onClose }: {
 }
 
 export function VirtualDocView({ doc }: { doc: VirtualDoc }) {
+  const [byWord, setByWord] = useState(true);
   const copy = () => { if (doc.content) void navigator.clipboard?.writeText(doc.content).catch(() => {}); };
   return (
     <div className="vdoc" data-testid="virtual-doc" data-kind={doc.kind}>
@@ -83,9 +85,15 @@ export function VirtualDocView({ doc }: { doc: VirtualDoc }) {
         <span className="statusbar__file">{doc.title}</span>
         <span className="vdoc__badge">Read-only</span>
         <span className="toolbar__spacer" />
+        {doc.kind === 'diff' && (
+          <div className="seg" role="tablist" aria-label="Diff view">
+            <button role="tab" aria-selected={byWord} className={`seg__btn${byWord ? ' seg__btn--active' : ''}`} onClick={() => setByWord(true)}>Words</button>
+            <button role="tab" aria-selected={!byWord} className={`seg__btn${!byWord ? ' seg__btn--active' : ''}`} onClick={() => setByWord(false)}>Lines</button>
+          </div>
+        )}
         {doc.content && <button className="btn btn--ghost btn--small" onClick={copy}>Copy</button>}
       </div>
-      {doc.kind === 'diff' && <div className="vdoc__diff"><DiffView patch={doc.content ?? ''} /></div>}
+      {doc.kind === 'diff' && <div className="vdoc__diff">{byWord ? <WordDiffView patch={doc.content ?? ''} /> : <DiffView patch={doc.content ?? ''} />}</div>}
       {(doc.kind === 'latex' || doc.kind === 'text') && <ReadOnlyCode text={doc.content ?? ''} language={doc.kind === 'latex' ? 'latex' : 'plain'} />}
       {(doc.kind === 'image' || doc.kind === 'pdf') && doc.src && <MediaView src={doc.src} kind={doc.kind} name={doc.title} />}
     </div>

@@ -215,3 +215,18 @@ test('the next run tells the model what happened to its proposals', async () => 
   assert.equal(last.blocks[0].meta, 'context');
   assert.equal(store.getProposal(proposal.id)!.noted, true);
 });
+
+test('a newer proposal for the same file replaces the undecided one', async () => {
+  const { session, proposal: first } = await propose();
+  const sent = await j(await fetch(`${gw}/sessions/${session.id}/messages`, as('alice', { method: 'POST', body: JSON.stringify({ text: `Another version [[tool:propose_patch ${JSON.stringify({ ...PATCH, summary: 'Second try' })}]]`, context: { branch: 'main' } }) })));
+  await (await fetch(`${gw}/runs/${sent.run.id}/events`, as('alice'))).text();
+  const detail = await j(await fetch(`${gw}/sessions/${session.id}`, as('alice')));
+  const old = detail.proposals.find((p: any) => p.id === first.id);
+  const fresh = detail.proposals.find((p: any) => p.summary === 'Second try');
+  assert.equal(old.status, 'superseded');
+  assert.match(old.reason, new RegExp(fresh.id.slice(0, 8)));
+  assert.equal(fresh.status, 'pending');
+  assert.equal((await fetch(`${gw}/proposals/${first.id}/accept`, as('alice', { method: 'POST', body: '{}' }))).status, 409);
+  const result = JSON.parse(detail.messages.filter((m: any) => m.runId === sent.run.id && m.role === 'user')[1].blocks[0].content);
+  assert.deepEqual(result.replaced, [first.id.slice(0, 8)]);
+});

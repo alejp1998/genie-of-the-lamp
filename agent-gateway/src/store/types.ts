@@ -43,7 +43,8 @@ export interface RunEvent {
   createdAt: string;
 }
 
-export type ProposalStatus = 'pending' | 'applying' | 'applied' | 'rejected' | 'stale' | 'failed';
+/** `superseded`: the assistant proposed a newer version for the same file before the user decided. */
+export type ProposalStatus = 'pending' | 'applying' | 'applied' | 'rejected' | 'stale' | 'failed' | 'superseded';
 
 export interface ProposalChange {
   path: string;

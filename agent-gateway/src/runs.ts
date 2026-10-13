@@ -134,6 +134,15 @@ export class RunManager {
           aldine: this.aldine, token, projectId: req.project.id, branch: req.ctx.branch, signal: controller.signal, limits: this.config.limits, state: newRunState(),
           propose: (draft) => {
             const p = this.store.createProposal({ ...draft, id: crypto.randomUUID(), sessionId: req.session.id, runId: run.id, projectId: req.project.id, branch: req.ctx.branch, provider: run.provider, model: run.model });
+            // A newer proposal for the same files replaces undecided older ones: the user reviews one version, not a queue.
+            const paths = new Set(p.changes.map((c) => c.path));
+            for (const old of this.store.listProposals(req.session.id)) {
+              if (old.id === p.id || old.status !== 'pending' || !old.changes.some((c) => paths.has(c.path))) continue;
+              this.store.updateProposal(old.id, { status: 'superseded', reason: `Replaced by proposal ${p.id.slice(0, 8)}`, noted: true });
+              this.store.audit({ ...auditBase, action: 'proposal_supersede', status: 'ok', detail: { proposal: old.id, by: p.id } });
+              emit('proposal', this.store.getProposal(old.id));
+              draft.replaced = [...(draft.replaced ?? []), old.id];
+            }
             this.store.audit({ ...auditBase, action: 'proposal_create', status: 'ok', detail: { proposal: p.id, files: p.changes.map((c) => c.path), added: p.added, removed: p.removed } });
             emit('proposal', p);
             return p;

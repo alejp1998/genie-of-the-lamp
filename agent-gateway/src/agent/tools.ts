@@ -26,6 +26,8 @@ export interface ProposalDraft {
   added: number;
   removed: number;
   base: Proposal['base'];
+  /** Filled by the store hook: earlier pending proposals this one replaced. */
+  replaced?: string[];
 }
 
 export interface FileRead {
@@ -354,7 +356,8 @@ export const proposePatch = tool({
         added += d.added;
       }
     }
-    const p = ctx.propose({ toolCallId: call.id, summary: input.summary, changes, diff: patches.join(''), added, removed, base: { head, versions } });
+    const draft: ProposalDraft = { toolCallId: call.id, summary: input.summary, changes, diff: patches.join(''), added, removed, base: { head, versions } };
+    const p = ctx.propose(draft);
     ctx.state.proposals++;
     return {
       proposal_id: p.id,
@@ -362,7 +365,8 @@ export const proposePatch = tool({
       files: changes.map((c) => c.path),
       added,
       removed,
-      note: 'The user now sees this diff with Accept, Edit and Reject. Nothing has changed yet. Do not propose the same change again; end your reply with a short explanation.',
+      ...(draft.replaced?.length ? { replaced: draft.replaced.map((id) => id.slice(0, 8)) } : {}),
+      note: `The user now sees this diff with Accept, Edit and Reject. Nothing has changed yet.${draft.replaced?.length ? ' It replaces your earlier undecided proposal for the same file, which can no longer be accepted.' : ''} End your reply with a short explanation.`,
     };
   },
 });
