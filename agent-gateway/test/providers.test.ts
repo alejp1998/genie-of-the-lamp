@@ -97,3 +97,14 @@ test('openai: HTTP errors become provider errors, 5xx retryable', async () => {
     server.close();
   }
 });
+
+test('images: anthropic gets base64 image blocks; OpenAI-compatible gets image_url parts only with vision', async () => {
+  const withImage: ChatMessage[] = [{ role: 'user', blocks: [{ type: 'image', mediaType: 'image/png', data: 'AAAA', name: 'shot.png' }, { type: 'text', text: 'what is this?' }] }];
+  const a = toAnthropicMessages(withImage, 'm');
+  assert.deepEqual((a[0].content as any[])[0], { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'AAAA' } });
+  const vision = toOpenAIMessages('s', withImage, true);
+  assert.deepEqual((vision[1] as any).content.map((p: any) => p.type), ['text', 'image_url']);
+  assert.equal((vision[1] as any).content[1].image_url.url, 'data:image/png;base64,AAAA');
+  const blind = toOpenAIMessages('s', withImage, false);
+  assert.match((blind[1] as any).content, /what is this\?\n\n\[Image “shot.png” attached; this model cannot view images.\]/);
+});

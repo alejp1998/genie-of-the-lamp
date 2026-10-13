@@ -170,3 +170,44 @@ test('provider internals are not exposed', async () => {
   const detail = await fetch(`${base}/sessions/${s.id}`, as('alice'));
   assert.ok(!(await detail.text()).includes('SECRET'));
 });
+
+test('attachments: referenced files are read fresh, pasted text and images are stored, images served back', async () => {
+  const s = await newSession();
+  const png = Buffer.from('89504e470d0a1a0a0000000d49484452', 'hex').toString('base64');
+  const r = await fetch(`${base}/sessions/${s.id}/messages`, as('alice', {
+    method: 'POST',
+    body: JSON.stringify({
+      text: 'Look at these',
+      context: { branch: 'main' },
+      attachments: [
+        { kind: 'file', path: 'intro.tex' },
+        { kind: 'text', name: 'Pasted text 1', text: 'Reviewer 2 says the intro is vague.' },
+        { kind: 'image', name: 'screenshot.png', mediaType: 'image/png', data: png },
+      ],
+    }),
+  }));
+  assert.equal(r.status, 202);
+  await readEvents((await json(r)).run.id);
+  const detail = await json(await fetch(`${base}/sessions/${s.id}`, as('alice')));
+  const blocks = detail.messages[0].blocks;
+  const file = blocks.find((b: any) => b.attachment?.kind === 'file');
+  assert.match(file.text, /^<referenced_file path="intro.tex">\n\\section\{Introduction\}/);
+  assert.equal(blocks.find((b: any) => b.attachment?.kind === 'text').attachment.name, 'Pasted text 1');
+  const img = blocks.find((b: any) => b.type === 'image');
+  assert.equal(img.data, undefined, 'image bytes are not inlined in the session');
+  const got = await fetch(`${base}/messages/${img.ref.replace('/', '/blocks/')}`, as('alice'));
+  assert.equal(got.status, 200);
+  assert.equal(got.headers.get('content-type'), 'image/png');
+  assert.equal(Buffer.from(await got.arrayBuffer()).toString('base64'), png);
+  const bobGet = await fetch(`${base}/messages/${img.ref.replace('/', '/blocks/')}`, as('bob'));
+  assert.equal(bobGet.status, 404, 'a private chat\'s images stay private');
+});
+
+test('attachments: too many images, bad base64 and bad media types are refused', async () => {
+  const s = await newSession();
+  const img = { kind: 'image', name: 'x.png', mediaType: 'image/png', data: 'iVBORw0KGgo=' };
+  const send2 = (attachments: unknown[]) => fetch(`${base}/sessions/${s.id}/messages`, as('alice', { method: 'POST', body: JSON.stringify({ text: 'x', context: { branch: 'main' }, attachments }) }));
+  assert.equal((await send2([img, img, img, img, img])).status, 413);
+  assert.equal((await send2([{ ...img, data: 'not base64!' }])).status, 400);
+  assert.equal((await send2([{ ...img, mediaType: 'image/svg+xml' }])).status, 400);
+});

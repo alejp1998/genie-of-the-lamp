@@ -1,7 +1,7 @@
 import crypto from 'node:crypto';
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import { z } from 'zod';
-import { ClientContext } from './agent/context.ts';
+import { Attachment, ClientContext, MAX_IMAGES } from './agent/context.ts';
 import { sessionCookie } from './aldine/http.ts';
 import type { AldineApi, Identity, ProjectInfo } from './aldine/types.ts';
 import type { Config, ModelRef } from './config.ts';
@@ -22,7 +22,11 @@ const SendBody = z.object({
   text: z.string().trim().min(1),
   context: ClientContext,
   model: z.string().max(200).optional(),
+  attachments: z.array(Attachment).max(12).optional(),
 }).strict();
+
+/** Room for a few pasted screenshots; every other route keeps the small default. */
+const MESSAGE_BODY_LIMIT = 30 * 1024 * 1024;
 
 const AcceptBody = z.object({
   edits: z.array(z.object({ change: z.number().int().min(0), edit: z.number().int().min(0), replacement: z.string().max(50_000) }).strict()).max(500).optional(),
@@ -36,13 +40,17 @@ const PatchBody = z.object({
 
 const modelId = (m: ModelRef) => `${m.provider}:${m.model}`;
 
-/** Reasoning signatures and other provider internals never leave the gateway. */
-function publicBlocks(blocks: Block[]): unknown[] {
-  return blocks.map((b) => (b.type === 'opaque' ? { type: 'opaque' } : b));
+/** Reasoning signatures and other provider internals never leave the gateway; images are fetched separately. */
+function publicBlocks(messageId: number, blocks: Block[]): unknown[] {
+  return blocks.map((b, i) => {
+    if (b.type === 'opaque') return { type: 'opaque' };
+    if (b.type === 'image') return { type: 'image', mediaType: b.mediaType, name: b.name, ref: `${messageId}/${i}` };
+    return b;
+  });
 }
 
 function publicMessage(m: StoredMessage) {
-  return { id: m.id, runId: m.runId, role: m.role, blocks: publicBlocks(m.blocks), createdAt: m.createdAt };
+  return { id: m.id, runId: m.runId, role: m.role, blocks: publicBlocks(m.id, m.blocks), createdAt: m.createdAt };
 }
 
 function publicSession(s: Session, viewer: Identity) {
@@ -168,25 +176,35 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     return reply.code(204).send();
   });
 
-  app.post<{ Params: { sid: string } }>(`${base}/sessions/:sid/messages`, async (req, reply) => {
+  app.post<{ Params: { sid: string } }>(`${base}/sessions/:sid/messages`, { bodyLimit: MESSAGE_BODY_LIMIT }, async (req, reply) => {
     const found = await sessionFor(req, reply, req.params.sid, 'own');
     if (!found) return;
     const body = SendBody.safeParse(req.body ?? {});
     if (!body.success) return reply.code(400).send({ error: `Invalid message: ${body.error.issues[0]?.message ?? 'bad request'}` });
     if (body.data.text.length > config.limits.maxMessageChars) return reply.code(413).send({ error: `Messages are limited to ${config.limits.maxMessageChars} characters` });
+    if ((body.data.attachments ?? []).filter((a) => a.kind === 'image').length > MAX_IMAGES) return reply.code(413).send({ error: `At most ${MAX_IMAGES} images per message` });
     const model = body.data.model ? config.models.find((m) => modelId(m) === body.data.model) : config.defaultModel;
     if (!model) return reply.code(400).send({ error: `Model "${body.data.model}" is not enabled on this server` });
     if (body.data.context.branch && found.project.branches.length && !found.project.branches.includes(body.data.context.branch)) {
       return reply.code(400).send({ error: `Branch "${body.data.context.branch}" does not exist in this project` });
     }
     try {
-      const run = await runs.start({ session: found.session, identity: req.identity!, project: found.project, text: body.data.text, ctx: body.data.context, model });
+      const run = await runs.start({ session: found.session, identity: req.identity!, project: found.project, text: body.data.text, ctx: body.data.context, model, attachments: body.data.attachments });
       return reply.code(202).send({ run });
     } catch (err) {
       if (err instanceof BusyError) return reply.code(409).send({ error: err.message });
       req.log.error({ err }, 'run start failed');
       return reply.code(502).send({ error: (err as Error).message });
     }
+  });
+
+  app.get<{ Params: { mid: string; idx: string } }>(`${base}/messages/:mid/blocks/:idx`, async (req, reply) => {
+    const m = /^\d{1,12}$/.test(req.params.mid) ? store.getMessage(Number(req.params.mid)) : null;
+    const b = m?.blocks[Number(req.params.idx)];
+    if (!m || !b || b.type !== 'image') return reply.code(404).send({ error: 'Attachment not found' });
+    const found = await sessionFor(req, reply, m.sessionId, 'view');
+    if (!found) return;
+    return reply.header('content-type', b.mediaType).header('cache-control', 'private, max-age=86400').header('x-content-type-options', 'nosniff').send(Buffer.from(b.data, 'base64'));
   });
 
   app.get<{ Params: { rid: string }; Querystring: { after?: string } }>(`${base}/runs/:rid/events`, async (req, reply) => {

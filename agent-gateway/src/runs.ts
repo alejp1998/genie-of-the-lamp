@@ -1,9 +1,9 @@
 import crypto from 'node:crypto';
 import { EventEmitter } from 'node:events';
-import { buildContextBlock, type ClientContext } from './agent/context.ts';
+import { type Attachment, attachmentBlocks, buildContextBlock, type ClientContext } from './agent/context.ts';
 import { runLoop } from './agent/loop.ts';
 import { systemPrompt } from './agent/prompt.ts';
-import { type AgentTool, ASSISTANT_TOOLS, newRunState } from './agent/tools.ts';
+import { type AgentTool, ASSISTANT_TOOLS, newRunState, readFresh } from './agent/tools.ts';
 import { decisionsNote } from './patches/apply.ts';
 import type { AldineApi, Identity, ProjectInfo } from './aldine/types.ts';
 import type { Config, ModelRef } from './config.ts';
@@ -27,6 +27,7 @@ export interface StartRun {
   text: string;
   ctx: ClientContext;
   model: ModelRef;
+  attachments?: Attachment[];
 }
 
 export class RunManager {
@@ -109,11 +110,14 @@ export class RunManager {
       const decided = this.store.unnotedDecisions(req.session.id);
       const note = decisionsNote(decided);
       for (const p of decided) this.store.updateProposal(p.id, { noted: true });
+      const reader = { aldine: this.aldine, token, projectId: req.project.id, branch: req.ctx.branch, signal: controller.signal, limits: this.config.limits };
+      const attached = await attachmentBlocks({ attachments: req.attachments ?? [], read: async (p) => (await readFresh(reader, p)).content });
       const userMsg: ChatMessage = {
         role: 'user',
         blocks: [
           ...(note ? [{ type: 'text' as const, text: note, meta: 'context' as const }] : []),
           { type: 'text', text: contextBlock, meta: 'context' },
+          ...attached,
           { type: 'text', text: req.text },
         ],
       };

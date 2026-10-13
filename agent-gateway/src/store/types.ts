@@ -121,6 +121,7 @@ export interface Store {
 
   appendMessage(sessionId: string, runId: string | null, msg: ChatMessage): StoredMessage;
   listMessages(sessionId: string): StoredMessage[];
+  getMessage(id: number): StoredMessage | null;
 
   createRun(r: Omit<Run, 'startedAt' | 'finishedAt' | 'usage' | 'error' | 'status'>): Run;
   finishRun(id: string, status: RunStatus, usage: Usage | null, error: string | null): void;

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type { AldineApi, ProjectInfo } from '../aldine/types.ts';
+import type { Block } from '../providers/types.ts';
 
 /** What only the browser knows. Everything else is fetched from Aldine by the gateway. */
 export const ClientContext = z.object({
@@ -15,6 +16,46 @@ export const ClientContext = z.object({
 }).strict();
 
 export type ClientContext = z.infer<typeof ClientContext>;
+
+/** What the user attached to a message: project files by path, pasted text, pasted or dropped images. */
+export const Attachment = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('file'), path: z.string().min(1).max(500) }).strict(),
+  z.object({ kind: z.literal('text'), name: z.string().min(1).max(120), text: z.string().min(1).max(200_000) }).strict(),
+  z.object({
+    kind: z.literal('image'),
+    name: z.string().max(200).default('image'),
+    mediaType: z.enum(['image/png', 'image/jpeg', 'image/gif', 'image/webp']),
+    // ~5 MB decoded, the provider limit per image.
+    data: z.string().min(1).max(7_000_000).regex(/^[A-Za-z0-9+/]+=*$/),
+  }).strict(),
+]);
+export type Attachment = z.infer<typeof Attachment>;
+
+export const MAX_IMAGES = 4;
+const FILE_BUDGET_CHARS = 80_000;
+
+/** Turns attachments into model-ready blocks. Referenced files are read now, from Aldine, within a size budget. */
+export async function attachmentBlocks(opts: {
+  attachments: Attachment[];
+  read(path: string): Promise<string>;
+}): Promise<Block[]> {
+  const blocks: Block[] = [];
+  let budget = FILE_BUDGET_CHARS;
+  for (const a of opts.attachments) {
+    if (a.kind === 'file') {
+      let body: string;
+      try { body = await opts.read(a.path); } catch (err) { body = `(could not read: ${(err as Error).message})`; }
+      if (body.length > budget) body = `${body.slice(0, Math.max(0, budget))}\n…[cut: the referenced files exceed ${FILE_BUDGET_CHARS} characters together; read the rest with read_file]`;
+      budget -= body.length;
+      blocks.push({ type: 'text', meta: 'attachment', attachment: { kind: 'file', name: a.path, path: a.path }, text: `<referenced_file path="${a.path}">\n${body}\n</referenced_file>` });
+    } else if (a.kind === 'text') {
+      blocks.push({ type: 'text', meta: 'attachment', attachment: { kind: 'text', name: a.name }, text: `<pasted_text name="${a.name.replace(/"/g, "'")}">\n${a.text}\n</pasted_text>` });
+    } else {
+      blocks.push({ type: 'image', mediaType: a.mediaType, data: a.data, name: a.name });
+    }
+  }
+  return blocks;
+}
 
 const EXCERPT_RADIUS = 12;
 

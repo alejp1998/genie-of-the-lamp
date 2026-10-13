@@ -160,6 +160,11 @@ export class SqliteStore implements Store {
     }));
   }
 
+  getMessage(id: number): StoredMessage | null {
+    const r = this.db.prepare('SELECT * FROM messages WHERE id = ?').get(id) as Row | undefined;
+    return r ? { id: r.id, sessionId: r.session_id, runId: r.run_id ?? null, role: r.role, blocks: JSON.parse(r.blocks), createdAt: r.created_at } : null;
+  }
+
   createRun(r: Omit<Run, 'startedAt' | 'finishedAt' | 'usage' | 'error' | 'status'>): Run {
     const t = now();
     this.db.prepare(`INSERT INTO runs (id, session_id, user_id, status, provider, model, started_at) VALUES (?, ?, ?, 'running', ?, ?, ?)`)

@@ -6,8 +6,14 @@
  */
 
 export type Block =
-  /** `meta: 'context'` marks the gateway's <editor_context> block: sent to the model, hidden in the chat. */
-  | { type: 'text'; text: string; meta?: 'context' }
+  /**
+   * `meta: 'context'` marks gateway-written blocks (editor context, decision
+   * notes): sent to the model, hidden in the chat. `meta: 'attachment'` is a
+   * file or pasted text the user attached; the chat shows it as a chip.
+   */
+  | { type: 'text'; text: string; meta?: 'context' | 'attachment'; attachment?: { kind: 'file' | 'text'; name: string; path?: string } }
+  /** A pasted or attached image (base64), only ever in user turns. */
+  | { type: 'image'; mediaType: string; data: string; name?: string }
   | { type: 'tool_call'; id: string; name: string; input: unknown }
   | { type: 'tool_result'; id: string; content: string; isError?: boolean }
   /** Provider-specific block (e.g. Anthropic thinking with its signature),

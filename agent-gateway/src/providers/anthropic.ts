@@ -13,6 +13,8 @@ export function toAnthropicMessages(messages: ChatMessage[], model: string): Ant
         if (b.text) content.push({ type: 'text', text: b.text });
       } else if (b.type === 'tool_call' && m.role === 'assistant') {
         content.push({ type: 'tool_use', id: b.id, name: b.name, input: b.input as Record<string, unknown> });
+      } else if (b.type === 'image' && m.role === 'user') {
+        content.push({ type: 'image', source: { type: 'base64', media_type: b.mediaType as Anthropic.Base64ImageSource['media_type'], data: b.data } });
       } else if (b.type === 'tool_result' && m.role === 'user') {
         content.push({ type: 'tool_result', tool_use_id: b.id, content: b.content, ...(b.isError ? { is_error: true } : {}) });
       } else if (b.type === 'opaque' && m.role === 'assistant' && b.provider === 'anthropic' && b.model === model) {

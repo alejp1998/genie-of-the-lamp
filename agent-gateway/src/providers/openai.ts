@@ -2,12 +2,14 @@ import { abortError } from './anthropic.ts';
 import { type Block, type ChatMessage, type Provider, ProviderError, type StopReason, type TurnCallbacks, type TurnRequest, type TurnResult } from './types.ts';
 
 /** Chat Completions message shapes (the subset this adapter sends). */
+type OAPart = { type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } };
 type OAMessage =
-  | { role: 'system' | 'user'; content: string }
+  | { role: 'system'; content: string }
+  | { role: 'user'; content: string | OAPart[] }
   | { role: 'assistant'; content: string | null; tool_calls?: { id: string; type: 'function'; function: { name: string; arguments: string } }[] }
   | { role: 'tool'; tool_call_id: string; content: string };
 
-export function toOpenAIMessages(system: string, messages: ChatMessage[]): OAMessage[] {
+export function toOpenAIMessages(system: string, messages: ChatMessage[], vision = false): OAMessage[] {
   const out: OAMessage[] = [{ role: 'system', content: system }];
   for (const m of messages) {
     if (m.role === 'assistant') {
@@ -23,7 +25,14 @@ export function toOpenAIMessages(system: string, messages: ChatMessage[]): OAMes
       if (b.type === 'tool_result') out.push({ role: 'tool', tool_call_id: b.id, content: b.isError ? `ERROR: ${b.content}` : b.content });
     }
     const text = m.blocks.filter((b) => b.type === 'text').map((b) => (b as { text: string }).text).join('\n\n');
-    if (text) out.push({ role: 'user', content: text });
+    const images = m.blocks.filter((b): b is Extract<Block, { type: 'image' }> => b.type === 'image');
+    if (images.length && vision) {
+      out.push({ role: 'user', content: [...(text ? [{ type: 'text' as const, text }] : []), ...images.map((im) => ({ type: 'image_url' as const, image_url: { url: `data:${im.mediaType};base64,${im.data}` } }))] });
+    } else {
+      const note = images.map((im) => `[Image ${im.name ? `“${im.name}” ` : ''}attached; this model cannot view images.]`).join('\n');
+      const all = [text, note].filter(Boolean).join('\n\n');
+      if (all) out.push({ role: 'user', content: all });
+    }
   }
   return out;
 }
@@ -47,17 +56,19 @@ export class OpenAICompatibleProvider implements Provider {
   readonly id: string;
   private baseUrl: string;
   private apiKey?: string;
+  private vision: boolean;
 
-  constructor(id: string, baseUrl: string, apiKey?: string) {
+  constructor(id: string, baseUrl: string, apiKey?: string, vision = false) {
     this.id = id;
     this.baseUrl = baseUrl.replace(/\/+$/, '');
     this.apiKey = apiKey;
+    this.vision = vision;
   }
 
   async turn(req: TurnRequest, cb: TurnCallbacks): Promise<TurnResult> {
     const body = {
       model: req.model,
-      messages: toOpenAIMessages(req.system, req.messages),
+      messages: toOpenAIMessages(req.system, req.messages, this.vision),
       tools: req.tools.map((t) => ({ type: 'function', function: { name: t.name, description: t.description, parameters: t.inputSchema } })),
       max_tokens: req.maxTokens,
       stream: true,

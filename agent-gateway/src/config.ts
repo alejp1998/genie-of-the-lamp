@@ -8,6 +8,8 @@ export interface ProviderConfig {
   kind: ProviderKind;
   apiKey?: string;
   baseUrl?: string;
+  /** Accepts image input (pasted screenshots); without it images reach the model as a note. */
+  vision?: boolean;
 }
 
 export interface ModelRef {
@@ -80,16 +82,16 @@ export function parseModelRef(ref: string, providers: ProviderConfig[]): ModelRe
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
   const providers: ProviderConfig[] = [];
   if (env.ANTHROPIC_API_KEY) {
-    providers.push({ id: 'anthropic', kind: 'anthropic', apiKey: env.ANTHROPIC_API_KEY, baseUrl: env.ANTHROPIC_BASE_URL || undefined });
+    providers.push({ id: 'anthropic', kind: 'anthropic', apiKey: env.ANTHROPIC_API_KEY, baseUrl: env.ANTHROPIC_BASE_URL || undefined, vision: true });
   }
   if (env.OPENAI_API_KEY) {
-    providers.push({ id: 'openai', kind: 'openai', apiKey: env.OPENAI_API_KEY, baseUrl: env.OPENAI_BASE_URL || 'https://api.openai.com/v1' });
+    providers.push({ id: 'openai', kind: 'openai', apiKey: env.OPENAI_API_KEY, baseUrl: env.OPENAI_BASE_URL || 'https://api.openai.com/v1', vision: true });
   }
   if (env.OPENROUTER_API_KEY) {
-    providers.push({ id: 'openrouter', kind: 'openai', apiKey: env.OPENROUTER_API_KEY, baseUrl: 'https://openrouter.ai/api/v1' });
+    providers.push({ id: 'openrouter', kind: 'openai', apiKey: env.OPENROUTER_API_KEY, baseUrl: 'https://openrouter.ai/api/v1', vision: true });
   }
   if (env.LOCAL_LLM_BASE_URL) {
-    providers.push({ id: 'local', kind: 'openai', apiKey: env.LOCAL_LLM_API_KEY || undefined, baseUrl: env.LOCAL_LLM_BASE_URL });
+    providers.push({ id: 'local', kind: 'openai', apiKey: env.LOCAL_LLM_API_KEY || undefined, baseUrl: env.LOCAL_LLM_BASE_URL, vision: env.LOCAL_LLM_VISION === '1' });
   }
   if (env.AGENT_ENABLE_MOCK === '1') providers.push({ id: 'mock', kind: 'mock' });
   if (!providers.length) {
