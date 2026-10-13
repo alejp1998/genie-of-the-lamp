@@ -54,3 +54,4 @@ apps/server/assets/pdf-viewer.html
 .data-assistant/
 .data-assistant-gw/
 .secrets-assistant/
+__pycache__/
