@@ -33,6 +33,19 @@ All notable changes to Aldine are documented here. The format follows
   preview, switched from the panel header or the settings. The file tree
   drops its "Drop files here" box: files dropped anywhere on the panel upload,
   with a faint tint while they hover.
+- LaTeX Genie branding (Genie of the Lamp fork): tab title (with the project name) and favicon,
+  the genie wordmark on the home, sign-in, onboarding and consent pages, and
+  an About dialog that offers this fork's source (AGPL §13).
+- PDF jumps (Genie of the Lamp fork): a double-click (or Cmd+J) flashes just the word or selection
+  in the PDF. The word is found through the boxes its source line typeset to,
+  across pages, with measured glyph positions, ligatures and hyphenation, and
+  with neighbouring words to tell repeats apart. An accepted assistant change
+  opens its file at the line and flashes the new text once the PDF has
+  re-typeset. Find no longer reports 0 matches after a re-typeset interrupted
+  its text extraction.
+- Assistant controls (Genie of the Lamp fork): no header button. Below the tabs, a bar at the
+  foot of the sidebar reopens it; as the right pane, it hides from a button
+  on its divider and returns from a tab on the window's right edge.
 - References (Genie of the Lamp fork): an `add_references` proposal shows the exact BibTeX lines it adds,
   styled like the target file, and can cite the new work in the same
   proposal (`\cite{@<DOI>}`). One Accept writes both. Aldine's

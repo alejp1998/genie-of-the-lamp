@@ -396,11 +396,12 @@ test('the assistant sits below the sidebar tabs by default, and can be a sidebar
   // Remembered per browser.
   await page.reload();
   await expect(page.locator('.assistant-dock').getByTestId('assistant-panel')).toBeVisible();
-  // No header button: the bar at the foot of the sidebar hides and shows it.
-  await expect(page.locator('.topbar [data-testid=assistant-toggle], header [data-testid=assistant-toggle]')).toHaveCount(0);
-  await sidebar.getByTestId('assistant-toggle').click();
+  // No header button: the right pane hides from its divider and comes back from the window's right edge.
+  await expect(page.locator('header [data-testid=assistant-toggle]')).toHaveCount(0);
+  await expect(sidebar.getByTestId('assistant-toggle')).toHaveCount(0);
+  await page.getByTestId('assistant-collapse').click();
   await expect(page.getByTestId('assistant-panel')).toHaveCount(0);
-  await sidebar.getByTestId('assistant-toggle').click();
+  await page.locator('.assistant-edge').click();
   await expect(page.locator('.assistant-dock').getByTestId('assistant-panel')).toBeVisible();
 });
 

@@ -163,6 +163,19 @@ Running dev log for the MVP in `ALDINE_AGENT_FORK_SPEC.md` (task brief:
   - DBLP currently throttles this host (HTTP 202/429), so live matching is not verified here; the tool reports those entries as not verified.
   - Gateway 68/68, web 83/83, MCP suite passes.
 
+- 2026-10-13 — **PDF precision and follow-up:**
+  - `findMatches` maps every character to its item and offset (NFKC ligatures, soft hyphens at line ends) and places words with canvas-measured widths in pdf.js' font family;
+  - forward jumps search the word, or the selection, in every SyncTeX box of the source line across pages, trying the word with its printed neighbours first;
+  - when nothing matches, only the first typeset line flashes;
+  - accepting a change dispatches `genie:show-change`: the editor opens the file at the line, and after the next render the PDF flashes the new words (or typesets itself after 20 s);
+  - the page-text cache follows the document and drops failed reads (the "0 results" Find bug).
+- 2026-10-13 — **LaTeX Genie branding** in the app (`apps/web/src/brand.tsx`); About's source link now points at this fork. **Assistant controls:** no header toggle; a sidebar foot bar ("below" layout); a divider hide button and a right-edge tab ("right" layout).
+- Tests at end of day: gateway 68/68, web unit 89/89, assistant e2e 13/13; upstream specs touched today (01, 05–07, 09, 10, 16–18, 20, 21, 27, 30, 36 and the file-tree group) all pass; MCP suite passes.
+
+### Next
+- Live-check `/bibcheck` once DBLP stops throttling this host (it answers 202/429 here today).
+- Optional: cited-first ordering of source cards.
+
 ### In progress
 - Nothing.
 

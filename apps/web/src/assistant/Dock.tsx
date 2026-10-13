@@ -113,12 +113,12 @@ export function useAssistantDock(projectId: string): Dock {
 }
 
 /**
- * The way back to a closed assistant: a slim bar at the foot of the sidebar
- * (no header button). In the right-pane layout it also shows and hides that
- * pane. The panel's own header closes it.
+ * The way back to a closed assistant below the sidebar tabs: a slim bar at
+ * the foot of the sidebar. (The right pane has its own handles: a button on
+ * its divider and a tab on the window's right edge.)
  */
 export function AssistantBar({ dock }: { dock: Dock }) {
-  if (!dock.config || dock.placement === 'tab' || (dock.placement === 'below' && dock.open)) return null;
+  if (!dock.config || dock.placement !== 'below' || dock.open) return null;
   return (
     <button
       className={`sidebar__assistant-bar${dock.open ? ' sidebar__assistant-bar--on' : ''}`}
@@ -128,7 +128,7 @@ export function AssistantBar({ dock }: { dock: Dock }) {
       data-testid="assistant-toggle"
     >
       <IconSpark /> <span className="sidebar__assistant-bar-label">{dock.config.agentLabel}</span>
-      <span className="sidebar__assistant-bar-hint" aria-hidden="true">{dock.placement === 'right' ? (dock.open ? 'Hide' : 'Show') : 'Open'}</span>
+      <span className="sidebar__assistant-bar-hint" aria-hidden="true">Open</span>
     </button>
   );
 }
@@ -145,7 +145,14 @@ interface DockProps {
 
 export function AssistantDock({ dock, projectId, getContext, onResizing, onShowHistory, getFiles }: DockProps) {
   const [dragging, setDragging] = useState(false);
-  if (!dock.config || !dock.open || dock.placement !== 'right') return null;
+  if (!dock.config || dock.placement !== 'right') return null;
+  if (!dock.open) {
+    return (
+      <button className="assistant-edge" onClick={() => dock.setOpen(true)} title={`Show ${dock.config.agentLabel}`} aria-label={`Show ${dock.config.agentLabel}`} data-testid="assistant-toggle" aria-pressed={false}>
+        <span aria-hidden="true">‹</span><IconSpark />
+      </button>
+    );
+  }
   return (
     <>
       <div
@@ -184,7 +191,17 @@ export function AssistantDock({ dock, projectId, getContext, onResizing, onShowH
           if (e.key === 'ArrowLeft') { e.preventDefault(); dock.setWidth(dock.width + step); }
           else if (e.key === 'ArrowRight') { e.preventDefault(); dock.setWidth(dock.width - step); }
         }}
-      />
+      >
+        <button
+          className="resizer__collapse"
+          onPointerDown={(e) => e.stopPropagation()}
+          onDoubleClick={(e) => e.stopPropagation()}
+          onClick={() => dock.setOpen(false)}
+          title="Hide the assistant"
+          aria-label="Hide the assistant"
+          data-testid="assistant-collapse"
+        >›</button>
+      </div>
       <div style={{ width: dock.width, flex: 'none', display: 'flex', minHeight: 0 }} className="assistant-dock">
         <AssistantPanel projectId={projectId} config={dock.config} getContext={getContext} onClose={() => dock.setOpen(false)} onShowHistory={onShowHistory} getFiles={getFiles} prefill={dock.prefill} placement={dock.placement} onPlace={dock.setPlacement} />
       </div>
