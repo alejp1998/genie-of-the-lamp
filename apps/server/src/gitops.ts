@@ -326,10 +326,10 @@ export async function commitSnapshotHeld(id: string, branch: string, files: File
  * agent's delta and nothing else, whatever lands on disk meanwhile. `before`
  * null = the file did not exist. Callers hold the repo lock.
  */
-export async function commitAgentWriteHeld(id: string, branch: string, files: Array<{ path: string; before: string | Buffer | null; after: string }>, message: string): Promise<{ committed: boolean; hash?: string; files: string[] }> {
+export async function commitAgentWriteHeld(id: string, branch: string, files: Array<{ path: string; before: string | Buffer | null; after: string }>, message: string, author: string = AGENT_COMMIT_AUTHOR): Promise<{ committed: boolean; hash?: string; files: string[] }> {
   const typed = files.filter((f) => f.before !== null).map((f) => ({ path: f.path, content: f.before as string | Buffer }));
   if (typed.length) await commitSnapshotHeld(id, branch, typed, 'aldine: autosave');
-  return commitSnapshotHeld(id, branch, files.map((f) => ({ path: f.path, content: f.after })), message, AGENT_COMMIT_AUTHOR);
+  return commitSnapshotHeld(id, branch, files.map((f) => ({ path: f.path, content: f.after })), message, author);
 }
 
 /**
@@ -474,13 +474,25 @@ export async function branchHead(id: string, branch: string): Promise<string> {
 /** Author string every agent write commits under; the History dot, the
  *  session review and this answer all key on it. */
 export const AGENT_COMMIT_AUTHOR = 'Claude';
+/** A name a caller may give its agent (X-Aldine-Agent-Label on /mcp). */
+export const AGENT_LABEL_RE = /^[A-Za-z0-9][A-Za-z0-9 ._-]{0,39}$/;
+/** An agent writing on someone's behalf names both, "Ada (via Paper Assistant)"; without a label it is Claude. */
+export function agentAuthorFor(label: string | null | undefined, userName: string | null | undefined): string {
+  if (!label || !AGENT_LABEL_RE.test(label)) return AGENT_COMMIT_AUTHOR;
+  const who = (userName || '').replace(/[<>()\n]/g, '').trim() || 'Operator';
+  return `${who} (via ${label})`;
+}
+/** What the History dot, the session review and the revert metric count as agent work. */
+export function isAgentAuthor(author: string): boolean {
+  return author === AGENT_COMMIT_AUTHOR || / \(via [A-Za-z0-9][A-Za-z0-9 ._-]{0,39}\)$/.test(author);
+}
 /** Commits walked per answer. Past this the counts are a floor
  *  (`truncated`), which is the honest reading of "Claude wrote 300 commits". */
 const AGENT_SCAN_LIMIT = 500;
 /** Commits handed back with a hash — the reviewer pays one diff request each. */
 const AGENT_REVIEW_LIMIT = 20;
 
-export interface AgentCommit { hash: string; date: string; message: string; files: string[] }
+export interface AgentCommit { hash: string; date: string; message: string; files: string[]; author: string }
 export interface AgentActivity {
   since: { head: string; at: string } | null;
   head: string;
@@ -538,12 +550,12 @@ export async function agentActivitySince(id: string, branch: string, mark: { hea
     if (!/^[0-9a-f]{40}$/.test(hash)) continue;
     records++;
     const [date, author, rest] = [f[i + 1], f[i + 2], f[i + 3]];
-    if (author !== AGENT_COMMIT_AUTHOR) continue;
+    if (!isAgentAuthor(author)) continue;
     const lines = rest.split('\n');
     const message = lines[0] ?? '';
     const touched = lines.slice(1).map((l) => l.trim()).filter(Boolean);
     for (const f of touched) files.add(f);
-    if (commits.length < AGENT_REVIEW_LIMIT) commits.push({ hash, date, message, files: touched });
+    if (commits.length < AGENT_REVIEW_LIMIT) commits.push({ hash, date, message, files: touched, author });
     commitCount++;
   }
   return { since: mark, head, commits, commitCount, fileCount: files.size, truncated: records >= AGENT_SCAN_LIMIT };

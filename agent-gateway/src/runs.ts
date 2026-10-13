@@ -3,7 +3,8 @@ import { EventEmitter } from 'node:events';
 import { buildContextBlock, type ClientContext } from './agent/context.ts';
 import { runLoop } from './agent/loop.ts';
 import { systemPrompt } from './agent/prompt.ts';
-import { type AgentTool, newRunState, READ_TOOLS } from './agent/tools.ts';
+import { type AgentTool, ASSISTANT_TOOLS, newRunState } from './agent/tools.ts';
+import { decisionsNote } from './patches/apply.ts';
 import type { AldineApi, Identity, ProjectInfo } from './aldine/types.ts';
 import type { Config, ModelRef } from './config.ts';
 import type { ChatMessage, Provider } from './providers/types.ts';
@@ -41,7 +42,7 @@ export class RunManager {
     this.aldine = deps.aldine;
     this.providers = deps.providers;
     this.config = deps.config;
-    this.tools = deps.tools ?? READ_TOOLS;
+    this.tools = deps.tools ?? ASSISTANT_TOOLS;
   }
 
   isLive(runId: string): boolean { return this.live.has(runId); }
@@ -103,7 +104,19 @@ export class RunManager {
     try {
       emit('status', { message: 'Gathering context…' });
       const contextBlock = await buildContextBlock({ aldine: this.aldine, token, project: req.project, ctx: req.ctx, signal: controller.signal });
-      const userMsg: ChatMessage = { role: 'user', blocks: [{ type: 'text', text: contextBlock, meta: 'context' }, { type: 'text', text: req.text }] };
+      // Decisions on earlier proposals reach the model here, at the start of its next turn,
+      // never mid-run where they would split a tool call from its result.
+      const decided = this.store.unnotedDecisions(req.session.id);
+      const note = decisionsNote(decided);
+      for (const p of decided) this.store.updateProposal(p.id, { noted: true });
+      const userMsg: ChatMessage = {
+        role: 'user',
+        blocks: [
+          ...(note ? [{ type: 'text' as const, text: note, meta: 'context' as const }] : []),
+          { type: 'text', text: contextBlock, meta: 'context' },
+          { type: 'text', text: req.text },
+        ],
+      };
       this.store.appendMessage(req.session.id, run.id, userMsg);
       const history: ChatMessage[] = this.store.listMessages(req.session.id).map((m) => ({ role: m.role, blocks: m.blocks }));
 
@@ -113,7 +126,15 @@ export class RunManager {
         effort: run.provider === 'anthropic' ? this.config.effort : undefined,
         system: systemPrompt(this.config.agentLabel),
         tools: this.tools,
-        toolCtx: { aldine: this.aldine, token, projectId: req.project.id, branch: req.ctx.branch, signal: controller.signal, limits: this.config.limits, state: newRunState() },
+        toolCtx: {
+          aldine: this.aldine, token, projectId: req.project.id, branch: req.ctx.branch, signal: controller.signal, limits: this.config.limits, state: newRunState(),
+          propose: (draft) => {
+            const p = this.store.createProposal({ ...draft, id: crypto.randomUUID(), sessionId: req.session.id, runId: run.id, projectId: req.project.id, branch: req.ctx.branch, provider: run.provider, model: run.model });
+            this.store.audit({ ...auditBase, action: 'proposal_create', status: 'ok', detail: { proposal: p.id, files: p.changes.map((c) => c.path), added: p.added, removed: p.removed } });
+            emit('proposal', p);
+            return p;
+          },
+        },
         limits: this.config.limits,
         history,
         persist: (msg) => this.store.appendMessage(req.session.id, run.id, msg),

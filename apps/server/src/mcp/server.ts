@@ -9,6 +9,7 @@ import { publicBase } from '../util.js';
 import { wwwAuthenticate } from '../oauth/metadata.js';
 import { registerTools, loadViewerHtml } from './tools.js';
 import { config } from '../config.js';
+import { AGENT_LABEL_RE } from '../gitops.js';
 
 /**
  * Streamable HTTP MCP endpoint (POST/GET /mcp), env-gated behind ALDINE_MCP=1.
@@ -75,7 +76,9 @@ export async function registerMcp(app: FastifyInstance): Promise<void> {
       if (auth.AUTH_ENABLED) reply.header('www-authenticate', wwwAuthenticate(publicBase(req), { invalidToken: !!credential }));
       return reply.code(401).send({ error: 'A valid access token is required' });
     }
-    (req as any)._mcpIdentity = { ...identity, ip: req.ip };
+    const rawLabel = req.headers['x-aldine-agent-label'];
+    const label = (Array.isArray(rawLabel) ? rawLabel[0] : rawLabel)?.trim();
+    (req as any)._mcpIdentity = { ...identity, ip: req.ip, agentLabel: label && AGENT_LABEL_RE.test(label) ? label : null };
   };
 
   app.post('/mcp', { bodyLimit: MCP_BODY_LIMIT, onRequest: guard }, async (req, reply) => {

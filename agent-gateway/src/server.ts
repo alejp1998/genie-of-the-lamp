@@ -6,6 +6,7 @@ import { sessionCookie } from './aldine/http.ts';
 import type { AldineApi, Identity, ProjectInfo } from './aldine/types.ts';
 import type { Config, ModelRef } from './config.ts';
 import type { Block } from './providers/types.ts';
+import { acceptProposal, ProposalError, rejectProposal } from './patches/apply.ts';
 import { BusyError, type RunManager } from './runs.ts';
 import type { Session, Store, StoredMessage } from './store/types.ts';
 
@@ -21,6 +22,11 @@ const SendBody = z.object({
   text: z.string().trim().min(1),
   context: ClientContext,
   model: z.string().max(200).optional(),
+}).strict();
+
+const AcceptBody = z.object({
+  edits: z.array(z.object({ change: z.number().int().min(0), edit: z.number().int().min(0), replacement: z.string().max(50_000) }).strict()).max(500).optional(),
+  contents: z.array(z.object({ change: z.number().int().min(0), content: z.string().max(200_000) }).strict()).max(20).optional(),
 }).strict();
 
 const PatchBody = z.object({
@@ -135,6 +141,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       messages: store.listMessages(found.session.id).map(publicMessage),
       runs: store.listRuns(found.session.id),
       activity: store.listSessionActivity(found.session.id),
+      proposals: store.listProposals(found.session.id),
       activeRunId: active && runs.isLive(active.id) ? active.id : null,
     };
   });
@@ -220,6 +227,46 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     if (!found) return;
     const cancelled = runs.cancel(run.id, req.identity!.user.id, found.project.id);
     return { cancelled };
+  });
+
+  async function proposalFor(req: FastifyRequest, reply: FastifyReply, id: string, mode: 'view' | 'own') {
+    const p = ID_RE.test(id) ? store.getProposal(id) : null;
+    if (!p) { reply.code(404).send({ error: 'Proposal not found' }); return null; }
+    const found = await sessionFor(req, reply, p.sessionId, mode);
+    if (!found) return null;
+    return { proposal: p, ...found };
+  }
+
+  app.get<{ Params: { id: string } }>(`${base}/proposals/:id`, async (req, reply) => {
+    const found = await proposalFor(req, reply, req.params.id, 'view');
+    if (!found) return;
+    return { proposal: found.proposal };
+  });
+
+  app.post<{ Params: { id: string } }>(`${base}/proposals/:id/accept`, async (req, reply) => {
+    const found = await proposalFor(req, reply, req.params.id, 'own');
+    if (!found) return;
+    const body = AcceptBody.safeParse(req.body ?? {});
+    if (!body.success) return reply.code(400).send({ error: `Invalid edit: ${body.error.issues[0]?.message ?? 'bad request'}` });
+    try {
+      const proposal = await acceptProposal({ store, aldine, config }, { proposal: found.proposal, session: found.session, identity: req.identity!, parts: body.data });
+      return { proposal };
+    } catch (err) {
+      if (err instanceof ProposalError) return reply.code(err.status).send({ error: err.message });
+      req.log.error({ err }, 'accept failed');
+      return reply.code(502).send({ error: (err as Error).message });
+    }
+  });
+
+  app.post<{ Params: { id: string } }>(`${base}/proposals/:id/reject`, async (req, reply) => {
+    const found = await proposalFor(req, reply, req.params.id, 'own');
+    if (!found) return;
+    try {
+      return { proposal: rejectProposal(store, { proposal: found.proposal, session: found.session, identity: req.identity! }) };
+    } catch (err) {
+      if (err instanceof ProposalError) return reply.code(err.status).send({ error: err.message });
+      throw err;
+    }
   });
 
   app.get<{ Params: { sid: string } }>(`${base}/sessions/:sid/audit`, async (req, reply) => {

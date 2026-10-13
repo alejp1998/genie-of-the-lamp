@@ -1,7 +1,9 @@
 import { z } from 'zod';
 import { type AldineApi, AldineToolError } from '../aldine/types.ts';
 import type { Limits } from '../config.ts';
+import { describeFailure, type EditSpec, fileDiff, resolveEdits, spliceEdits } from '../patches/anchors.ts';
 import type { ToolSpec } from '../providers/types.ts';
+import type { Proposal, ProposalChange } from '../store/types.ts';
 
 /** What one run's tools share: the user's project credential and per-run bookkeeping. */
 export interface ToolContext {
@@ -12,6 +14,18 @@ export interface ToolContext {
   signal: AbortSignal;
   limits: Limits;
   state: RunState;
+  /** Stores a reviewable proposal for this run; absent where proposals are not offered. */
+  propose?: (draft: ProposalDraft) => Proposal;
+}
+
+export interface ProposalDraft {
+  toolCallId: string;
+  summary: string;
+  changes: ProposalChange[];
+  diff: string;
+  added: number;
+  removed: number;
+  base: Proposal['base'];
 }
 
 export interface FileRead {
@@ -22,13 +36,14 @@ export interface FileRead {
 
 export interface RunState {
   compiles: number;
+  proposals: number;
   /** Latest versions seen per path; propose_patch anchors against these. */
   reads: Map<string, FileRead>;
   /** Whole-file text fetched during this run (search reuses it). */
   files: Map<string, string>;
 }
 
-export const newRunState = (): RunState => ({ compiles: 0, reads: new Map(), files: new Map() });
+export const newRunState = (): RunState => ({ compiles: 0, proposals: 0, reads: new Map(), files: new Map() });
 
 export interface AgentTool<I = any> {
   name: string;
@@ -38,7 +53,7 @@ export interface AgentTool<I = any> {
   activity(input: I): string;
   /** One-line outcome shown when it finishes. */
   summarize(result: any): string;
-  run(input: I, ctx: ToolContext): Promise<unknown>;
+  run(input: I, ctx: ToolContext, call: { id: string }): Promise<unknown>;
 }
 
 const TEXT_EXT = /\.(tex|bib|sty|cls|bst|md|txt|cfg|def|ltx|dtx|ins|bbx|cbx|lbx|csv|tsv|json|yaml|yml)$/i;
@@ -61,28 +76,43 @@ function remember(ctx: ToolContext, path: string, r: { contentVersion?: number; 
 /** Lines per request when a file is over Aldine's single-read cap (~100 KB). */
 const WINDOW_LINES = 1500;
 
-async function wholeFile(ctx: ToolContext, path: string): Promise<string> {
-  const hit = ctx.state.files.get(path);
-  if (hit !== undefined) return hit;
-  let content: string;
+export interface FreshRead {
+  content: string;
+  contentVersion: number;
+  fileVersion: number;
+  head: string | null;
+}
+
+type Reader = Pick<ToolContext, 'aldine' | 'token' | 'projectId' | 'branch' | 'signal' | 'limits'>;
+
+/** The file as Aldine has it now, whole even past the ~100 KB single-read cap. */
+export async function readFresh(ctx: Reader, path: string): Promise<FreshRead> {
+  const call = (args: Record<string, unknown>) => ctx.aldine.callTool(ctx.token, 'read_file', { project: ctx.projectId, branch: ctx.branch, path, ...args }, { signal: ctx.signal, timeoutMs: ctx.limits.toolTimeoutMs });
   try {
-    const r = await mcp(ctx, 'read_file', { path });
-    remember(ctx, path, r);
-    content = typeof r.content === 'string' ? r.content : '';
+    const r = await call({});
+    return { content: typeof r.content === 'string' ? r.content : '', contentVersion: r.contentVersion, fileVersion: r.fileVersion, head: r.head ?? null };
   } catch (err) {
     if (!(err instanceof AldineToolError) || !/cap|too large|bytes/i.test(err.message)) throw err;
     // Over the read cap: stitch it together from line windows.
     const parts: string[] = [];
     let total = Infinity;
+    let last: any = {};
     for (let from = 1; from <= total; from += WINDOW_LINES) {
-      const r = await mcp(ctx, 'read_file', { path, from_line: from, to_line: from + WINDOW_LINES - 1 });
-      total = typeof r.totalLines === 'number' ? r.totalLines : 0;
-      parts.push(typeof r.content === 'string' ? r.content.replace(/\n$/, '') : '');
+      last = await call({ from_line: from, to_line: from + WINDOW_LINES - 1 });
+      total = typeof last.totalLines === 'number' ? last.totalLines : 0;
+      parts.push(typeof last.content === 'string' ? last.content.replace(/\n$/, '') : '');
     }
-    content = parts.join('\n');
+    return { content: parts.join('\n') + '\n', contentVersion: last.contentVersion, fileVersion: last.fileVersion, head: last.head ?? null };
   }
-  ctx.state.files.set(path, content);
-  return content;
+}
+
+async function wholeFile(ctx: ToolContext, path: string): Promise<string> {
+  const hit = ctx.state.files.get(path);
+  if (hit !== undefined) return hit;
+  const r = await readFresh(ctx, path);
+  remember(ctx, path, r);
+  ctx.state.files.set(path, r.content);
+  return r.content;
 }
 
 const errorsBrief = (errors: any[] | undefined, n = 30) => (errors ?? []).slice(0, n).map((e) => ({
@@ -235,7 +265,83 @@ export const listLabels = tool({
   },
 });
 
+const MAX_PROPOSALS_PER_RUN = 3;
+const PATH_OK = (p: string) => !p.startsWith('/') && !p.includes('\\') && !p.split('/').some((seg) => !seg || seg === '..' || seg.startsWith('.'));
+
+const EditInput = z.object({
+  quote: z.string().min(8).max(20_000).describe('Exact text currently in the file (at least 8 characters, unique unless occurrence is given)'),
+  replacement: z.string().max(50_000).describe('Text that replaces the quote'),
+  occurrence: z.number().int().min(1).optional().describe('Which match to replace when the quote appears more than once (1-based)'),
+}).strict();
+
+const ChangeInput = z.object({
+  path: z.string().min(1).max(500),
+  edits: z.array(EditInput).min(1).max(50).optional().describe('Changes to an existing file'),
+  new_content: z.string().max(200_000).optional().describe('Full content of a NEW file (not for existing files)'),
+}).strict();
+
+export const proposePatch = tool({
+  name: 'propose_patch',
+  description: 'Propose changes to the project for the user to review. Nothing is written: the user sees a diff and chooses Accept, Edit or Reject. Edit existing files with quote/replacement pairs that quote the current text exactly (read the file first); create a new file with new_content. Group related changes into one proposal with a one-line summary. After proposing, stop and tell the user in one or two sentences what you proposed and why.',
+  schema: z.object({
+    summary: z.string().min(1).max(160).describe('One line, imperative, e.g. "Close the parenthesis in the update rule"'),
+    changes: z.array(ChangeInput).min(1).max(10),
+  }).strict(),
+  activity: (i) => `Proposing changes to ${[...new Set(i.changes.map((c) => c.path))].join(', ')}…`,
+  summarize: (r) => `Proposed changes to ${r.files.join(', ')} (+${r.added} −${r.removed})`,
+  async run(input, ctx, call) {
+    if (!ctx.propose) throw new Error('Proposals are not available in this context.');
+    if (ctx.state.proposals >= MAX_PROPOSALS_PER_RUN) throw new Error(`At most ${MAX_PROPOSALS_PER_RUN} proposals per request; wait for the user to review the ones you made.`);
+    const seen = new Set<string>();
+    const changes: ProposalChange[] = [];
+    const patches: string[] = [];
+    const versions: Proposal['base']['versions'] = {};
+    let head: string | null = null;
+    let added = 0;
+    let removed = 0;
+    for (const c of input.changes) {
+      if (!PATH_OK(c.path)) throw new Error(`"${c.path}" is not a valid project path (relative, no "..", no hidden segments).`);
+      if (seen.has(c.path)) throw new Error(`${c.path} appears twice; put all its edits in one change.`);
+      seen.add(c.path);
+      if ((c.edits === undefined) === (c.new_content === undefined)) throw new Error(`Give ${c.path} either edits (existing file) or new_content (new file), not both or neither.`);
+      if (c.edits) {
+        const f = await readFresh(ctx, c.path);
+        const res = resolveEdits(f.content, c.edits as EditSpec[]);
+        if (!res.ok) throw new Error(describeFailure(c.path, res));
+        const after = spliceEdits(f.content, c.edits as EditSpec[], res.ranges);
+        if (after === f.content) throw new Error(`The edits to ${c.path} change nothing.`);
+        const d = fileDiff(c.path, f.content, after);
+        versions[c.path] = { contentVersion: f.contentVersion, fileVersion: f.fileVersion };
+        head = f.head ?? head;
+        changes.push({ path: c.path, kind: 'edit', edits: c.edits });
+        patches.push(d.patch);
+        added += d.added;
+        removed += d.removed;
+      } else {
+        let exists = false;
+        try { await readFresh(ctx, c.path); exists = true; } catch (err) { if (!(err instanceof AldineToolError)) throw err; }
+        if (exists) throw new Error(`${c.path} already exists; change it with edits instead of new_content.`);
+        const d = fileDiff(c.path, null, c.new_content!);
+        changes.push({ path: c.path, kind: 'create', content: c.new_content });
+        patches.push(d.patch);
+        added += d.added;
+      }
+    }
+    const p = ctx.propose({ toolCallId: call.id, summary: input.summary, changes, diff: patches.join(''), added, removed, base: { head, versions } });
+    ctx.state.proposals++;
+    return {
+      proposal_id: p.id,
+      status: 'awaiting_review',
+      files: changes.map((c) => c.path),
+      added,
+      removed,
+      note: 'The user now sees this diff with Accept, Edit and Reject. Nothing has changed yet. Do not propose the same change again; end your reply with a short explanation.',
+    };
+  },
+});
+
 export const READ_TOOLS: AgentTool[] = [listFiles, readFile, searchProject, getCompileStatus, compile, listCitations, listLabels];
+export const ASSISTANT_TOOLS: AgentTool[] = [...READ_TOOLS, proposePatch];
 
 export function toolSpecs(tools: AgentTool[]): ToolSpec[] {
   return tools.map((t) => {

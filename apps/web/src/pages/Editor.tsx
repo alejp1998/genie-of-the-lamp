@@ -36,6 +36,7 @@ import { toggleTheme } from '../theme';
 import { shortcut } from '../platform';
 import ProjectSettings from '../components/ProjectSettings';
 import { ENGINES } from '../util/engines';
+import { agentDisplayName, isAgentAuthor } from '../util/agentAuthor';
 import { AssistantDock, AssistantToggle, useAssistantDock } from '../assistant/Dock';
 import type { EditorContext } from '../assistant/api';
 
@@ -368,6 +369,8 @@ export default function Editor() {
     commits: Array<{ hash: string; message: string; patch: string }>;
     total: number;
     truncated: boolean;
+    /** Who made them: "Claude", or "<person> (via <agent>)". */
+    name: string;
   } | null>(null);
 
   /** Records that this person has been shown Claude's work up to `head`.
@@ -385,14 +388,14 @@ export default function Editor() {
   }, [id, branch, authEnabled]);
 
   /** One dialog for both prompts: the live session and the away check. */
-  const openAgentReview = useCallback(async (entries: Array<{ hash: string; message: string }>, total: number): Promise<boolean> => {
+  const openAgentReview = useCallback(async (entries: Array<{ hash: string; message: string; author?: string }>, total: number): Promise<boolean> => {
     const shown = entries.slice(0, AGENT_REVIEW_MAX_COMMITS); // newest first
     try {
       const diffs = await Promise.all(shown.map((c) => api.commitDiff(id, c.hash)));
       // Read oldest first (the log is newest first): the story of the session.
       const commits = shown.map((c, i) => ({ hash: c.hash, message: c.message, patch: diffs[i].patch })).reverse();
       const files = [...new Set(commits.flatMap((c) => filesInPatch(c.patch)))];
-      setAgentReview({ files, hashes: shown.map((c) => c.hash), commits, total, truncated: total > shown.length });
+      setAgentReview({ files, hashes: shown.map((c) => c.hash), commits, total, truncated: total > shown.length, name: agentDisplayName(shown.map((c) => c.author)) });
       return true;
     } catch (err: any) {
       toast(`Could not load Claude’s changes: ${err.message}`, 'error');
@@ -420,13 +423,13 @@ export default function Editor() {
       try {
         const log = await api.log(id, branch);
         // git dates carry second precision — allow slack around the session start
-        const session = log.filter((c) => c.author === 'Claude' && new Date(c.date).getTime() >= startedAt - 10_000);
+        const session = log.filter((c) => isAgentAuthor(c.author) && new Date(c.date).getTime() >= startedAt - 10_000);
         if (!session.length) return;
         bumpHistory();
         const shown = session.slice(0, AGENT_REVIEW_MAX_COMMITS);
         const diffs = await Promise.all(shown.map((c) => api.commitDiff(id, c.hash)));
         const files = [...new Set(diffs.flatMap((d) => filesInPatch(d.patch)))];
-        toast(`Claude edited ${files.length} file${files.length === 1 ? '' : 's'}`, 'info', {
+        toast(`${agentDisplayName(session.map((c) => c.author))} edited ${files.length} file${files.length === 1 ? '' : 's'}`, 'info', {
           label: 'Review',
           testId: 'agent-session-review',
           key: 'agent-review',
@@ -469,7 +472,7 @@ export default function Editor() {
         // says so here, and a scan that hit its ceiling reports a floor.
         const scope = res.commitCount > res.commits.length ? ` in ${res.commitCount}${res.truncated ? '+' : ''} commits` : '';
         const when = res.since ? 'while you were away' : 'in this project';
-        toast(`Claude edited ${n} file${n === 1 ? '' : 's'}${scope} ${when}`, 'info', {
+        toast(`${agentDisplayName(res.commits.map((c) => c.author))} edited ${n} file${n === 1 ? '' : 's'}${scope} ${when}`, 'info', {
           label: 'Review',
           testId: 'agent-away-review',
           // One review prompt at a time: a session ending replaces this one.
@@ -490,9 +493,9 @@ export default function Editor() {
     if (!agentReview) return;
     try {
       // log order is newest-first — exactly what the revert endpoint expects.
-      const res = await api.revertCommits(id, branch, agentReview.hashes, 'Revert Claude’s edits', identity.name);
+      const res = await api.revertCommits(id, branch, agentReview.hashes, `Revert ${agentReview.name}’s edits`, identity.name);
       setAgentReview(null);
-      toast(res.ok ? `Reverted Claude’s edits${res.author ? ` as ${res.author}` : ''}` : 'Nothing to revert — these changes were already undone', res.ok ? 'ok' : 'info');
+      toast(res.ok ? `Reverted ${agentReview.name}’s edits${res.author ? ` as ${res.author}` : ''}` : 'Nothing to revert — these changes were already undone', res.ok ? 'ok' : 'info');
       bumpHistory();
       // The preview followed Claude's edits (an agent write arms auto-typeset);
       // the revert reaches the editor as a remote transaction, which arms
@@ -1328,9 +1331,9 @@ export default function Editor() {
       {aboutOpen && <About onClose={() => setAboutOpen(false)} />}
 
       {agentReview && (
-        <Modal onClose={() => setAgentReview(null)} label="Review Claude’s edits" wide testId="agent-review-modal">
+        <Modal onClose={() => setAgentReview(null)} label={`Review ${agentReview.name}’s edits`} wide testId="agent-review-modal">
           <div>
-            <h2>Claude’s edits</h2>
+            <h2>{agentReview.name}’s edits</h2>
             <p className="modal__sub">
               {agentReview.files.length} file{agentReview.files.length === 1 ? '' : 's'} · {agentReview.hashes.length} commit{agentReview.hashes.length === 1 ? '' : 's'} on {branch}
             </p>

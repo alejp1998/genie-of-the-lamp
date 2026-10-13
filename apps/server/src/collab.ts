@@ -116,15 +116,15 @@ export function scheduleCommit(projectId: string, branch: string, message?: stri
  * Claude's name, so it can never surface as an anonymous autosave. Callers
  * hold the repo lock.
  */
-export async function commitAgentWrite(projectId: string, branch: string, files: Array<{ path: string; before: string | Buffer | null; after: string }>, message: string): Promise<{ hash: string | null; unchanged: boolean }> {
+export async function commitAgentWrite(projectId: string, branch: string, files: Array<{ path: string; before: string | Buffer | null; after: string }>, message: string, author: string = AGENT_COMMIT_AUTHOR): Promise<{ hash: string | null; unchanged: boolean }> {
   try {
-    const res = await commitAgentWriteHeld(projectId, branch, files, message);
+    const res = await commitAgentWriteHeld(projectId, branch, files, message, author);
     if (!res.committed) return { hash: null, unchanged: true };
     notifyCommitted(projectId, branch);
     return { hash: res.hash ?? null, unchanged: false };
   } catch (err) {
     console.warn(`[collab] commit of ${files.map((f) => f.path).join(', ')} failed, left for the autosave: ${(err as Error).message}`);
-    scheduleCommit(projectId, branch, message, AGENT_COMMIT_AUTHOR, files.map((f) => f.path));
+    scheduleCommit(projectId, branch, message, author, files.map((f) => f.path));
     return { hash: null, unchanged: false };
   }
 }
@@ -560,7 +560,7 @@ const AGENT_PRESENCE_TTL_MS = Number(process.env.ALDINE_AGENT_PRESENCE_TTL_MS ||
  *  unloads a doc with its last connection (a sole viewer's reload), and the
  *  session must outlive that so the reloaded doc shows it again and the away
  *  check stays quiet while it runs. */
-interface AgentPresence { startedAt: number; expiresAt: number; timer: NodeJS.Timeout }
+interface AgentPresence { startedAt: number; expiresAt: number; timer: NodeJS.Timeout; name: string }
 const agentPresence = new Map<string, AgentPresence>();
 type AwarenessDoc = { awareness?: { setLocalState(s: unknown): void } };
 
@@ -568,7 +568,7 @@ function setAgentAwareness(doc: AwarenessDoc | undefined, live: AgentPresence): 
   // setLocalState, not setLocalStateField: Hocuspocus nulls the server-side
   // local state at doc creation, and y-protocols' setLocalStateField is a
   // silent no-op on a null state — the agent would never appear.
-  doc?.awareness?.setLocalState({ user: { ...AGENT_AWARENESS_USER, startedAt: live.startedAt } });
+  doc?.awareness?.setLocalState({ user: { ...AGENT_AWARENESS_USER, name: live.name, startedAt: live.startedAt } });
 }
 
 /**
@@ -581,7 +581,7 @@ function setAgentAwareness(doc: AwarenessDoc | undefined, live: AgentPresence): 
  * haunt the presence chip; the start time survives re-marks so a session's
  * first commit is still the session's after a reload.
  */
-export function markAgentPresence(projectId: string, branch: string, filePath: string): void {
+export function markAgentPresence(projectId: string, branch: string, filePath: string, agentName: string = AGENT_AWARENESS_USER.name): void {
   const name = docName(projectId, branch, filePath);
   const now = Date.now();
   const prev = agentPresence.get(name);
@@ -592,7 +592,7 @@ export function markAgentPresence(projectId: string, branch: string, filePath: s
     try { d?.awareness?.setLocalState(null); } catch { /* doc unloaded meanwhile */ }
   }, AGENT_PRESENCE_TTL_MS);
   timer.unref?.();
-  const live: AgentPresence = { startedAt: prev?.startedAt ?? now, expiresAt: now + AGENT_PRESENCE_TTL_MS, timer };
+  const live: AgentPresence = { startedAt: prev?.startedAt ?? now, expiresAt: now + AGENT_PRESENCE_TTL_MS, timer, name: agentName };
   agentPresence.set(name, live);
   setAgentAwareness(hocuspocus.documents.get(name) as AwarenessDoc | undefined, live);
 }

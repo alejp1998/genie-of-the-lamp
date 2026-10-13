@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import type { ChatMessage, Usage } from '../providers/types.ts';
-import type { AuditEntry, AuditRecord, Run, RunEvent, RunStatus, Session, Store, StoredMessage } from './types.ts';
+import type { AuditEntry, AuditRecord, Proposal, Run, RunEvent, RunStatus, Session, Store, StoredMessage } from './types.ts';
 
 const now = () => new Date().toISOString();
 
@@ -50,6 +50,17 @@ CREATE TABLE IF NOT EXISTS events (
   created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS events_run ON events (run_id, id);
+CREATE TABLE IF NOT EXISTS proposals (
+  id TEXT PRIMARY KEY,
+  session_id TEXT NOT NULL REFERENCES sessions (id) ON DELETE CASCADE,
+  run_id TEXT NOT NULL,
+  project_id TEXT NOT NULL,
+  data TEXT NOT NULL,
+  status TEXT NOT NULL,
+  noted INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS proposals_session ON proposals (session_id, created_at);
 `;
 
 // Kept in its own file: audit records outlive deleted sessions and never hold chat content.
@@ -197,6 +208,41 @@ export class SqliteStore implements Store {
       WHERE r.session_id = ? AND e.type IN ('tool_start', 'tool_end', 'notice', 'run_error') ORDER BY e.id`).all(sessionId) as Row[]).map((r) => ({
       id: r.id, runId: r.run_id, type: r.type, data: JSON.parse(r.data), createdAt: r.created_at,
     }));
+  }
+
+  createProposal(p: Parameters<Store['createProposal']>[0]): Proposal {
+    const full: Proposal = {
+      ...p, status: 'pending', createdAt: now(), decidedBy: null, decidedByName: null, decidedAt: null,
+      commit: null, author: null, edited: false, reason: null, compile: null, noted: false,
+    };
+    this.db.prepare('INSERT INTO proposals (id, session_id, run_id, project_id, data, status, noted, created_at) VALUES (?, ?, ?, ?, ?, ?, 0, ?)')
+      .run(full.id, full.sessionId, full.runId, full.projectId, JSON.stringify(full), full.status, full.createdAt);
+    return full;
+  }
+
+  getProposal(id: string): Proposal | null {
+    const r = this.db.prepare('SELECT data FROM proposals WHERE id = ?').get(id) as Row | undefined;
+    return r ? JSON.parse(r.data) : null;
+  }
+
+  listProposals(sessionId: string): Proposal[] {
+    return (this.db.prepare('SELECT data FROM proposals WHERE session_id = ? ORDER BY created_at').all(sessionId) as Row[]).map((r) => JSON.parse(r.data));
+  }
+
+  updateProposal(id: string, patch: Partial<Proposal>): Proposal | null {
+    const cur = this.getProposal(id);
+    if (!cur) return null;
+    const next = { ...cur, ...patch };
+    this.db.prepare('UPDATE proposals SET data = ?, status = ?, noted = ? WHERE id = ?').run(JSON.stringify(next), next.status, next.noted ? 1 : 0, id);
+    return next;
+  }
+
+  unnotedDecisions(sessionId: string): Proposal[] {
+    return (this.db.prepare(`SELECT data FROM proposals WHERE session_id = ? AND noted = 0 AND status IN ('applied', 'rejected', 'stale', 'failed') ORDER BY created_at`).all(sessionId) as Row[]).map((r) => JSON.parse(r.data));
+  }
+
+  countPending(sessionId: string): number {
+    return Number((this.db.prepare(`SELECT COUNT(*) AS n FROM proposals WHERE session_id = ? AND status = 'pending'`).get(sessionId) as Row).n);
   }
 
   audit(e: AuditEntry): void {

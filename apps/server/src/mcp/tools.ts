@@ -406,6 +406,8 @@ const editShape = {
 
 export function registerTools(server: McpServer, identity: McpIdentity, ctx: ToolContext = { publicBase: config.publicUrl }): void {
   const base = ctx.publicBase.replace(/\/$/, '');
+  // Who agent writes in this request are committed as: "Claude", or "<user> (via <label>)".
+  const agentAuthor = gitops.agentAuthorFor(identity.agentLabel, identity.user?.name || identity.user?.email);
   const csp = viewerCsp(base);
   const resourceMeta = csp ? { ui: { csp } } : undefined;
 
@@ -602,7 +604,7 @@ export function registerTools(server: McpServer, identity: McpIdentity, ctx: Too
           }
           // Presence first: the tint keys on the agent being in awareness when
           // the change arrives, so the first edit must not outrun it.
-          markAgentPresence(meta.id, branch, rel);
+          markAgentPresence(meta.id, branch, rel, agentAuthor);
           // Back-to-front, same tick: earlier offsets stay valid, and no human
           // keystroke can interleave. 'stale' from the CRDT apply is impossible
           // here by construction but handled defensively anyway.
@@ -630,7 +632,7 @@ export function registerTools(server: McpServer, identity: McpIdentity, ctx: Too
           }
           before = raw;
           newContent = spliceEdits(current, edits, res.ranges);
-          markAgentPresence(meta.id, branch, rel);
+          markAgentPresence(meta.id, branch, rel, agentAuthor);
           store.writeFile(meta.id, branch, rel, newContent);
           // Reseed rather than mark: a doc of this file that the registry
           // holds under another name would otherwise write the old text back
@@ -640,7 +642,7 @@ export function registerTools(server: McpServer, identity: McpIdentity, ctx: Too
           applied = edits.length;
           firstFrom = Math.min(...res.ranges.map((r) => r.from));
         }
-        const commit = await commitAgentWrite(meta.id, branch, [{ path: rel, before, after: newContent }], cleanCommitMessage(message, `Edit ${rel}`));
+        const commit = await commitAgentWrite(meta.id, branch, [{ path: rel, before, after: newContent }], cleanCommitMessage(message, `Edit ${rel}`), agentAuthor);
         const e = await echo(meta.id, branch);
         return ok({ applied, path: rel, contentVersion: contentVersion(meta.id, branch), fileVersion: fileVersion(meta.id, branch, rel), snippet: snippetAround(newContent, firstFrom), ...commitFields(commit, e.head), ...e });
       });
@@ -675,11 +677,11 @@ export function registerTools(server: McpServer, identity: McpIdentity, ctx: Too
           if (conflict) return ok({ ...conflict, path: rel, contentVersion: conflict.currentVersion, ...(await echo(meta.id, branch)) });
         }
         const before = openDocContent(meta.id, branch, rel) ?? diskContent(meta.id, branch, rel);
-        markAgentPresence(meta.id, branch, rel);
+        markAgentPresence(meta.id, branch, rel, agentAuthor);
         store.writeFile(meta.id, branch, rel, content);
         refreshBranchDocsFromDisk(meta.id, branch, [rel]);
         signalAgentWrite(meta.id, branch);
-        const commit = await commitAgentWrite(meta.id, branch, [{ path: rel, before, after: content }], cleanCommitMessage(message, `Update ${rel}`));
+        const commit = await commitAgentWrite(meta.id, branch, [{ path: rel, before, after: content }], cleanCommitMessage(message, `Update ${rel}`), agentAuthor);
         // Like PUT /file: a rootless project adopts its first .tex here, not
         // only at compile time — wordcount and project_structure answer for a
         // real root right after the write.
@@ -770,7 +772,7 @@ export function registerTools(server: McpServer, identity: McpIdentity, ctx: Too
           const live = open !== null ? res.ranges.map((r, i) => ({ ...r, edit: f.edits![i] })).sort((a, b) => b.from - a.from) : null;
           writes.push({ path: f.path, before: raw ?? current, next: spliceEdits(current, f.edits!, res.ranges), live });
         }
-        for (const w of writes) markAgentPresence(meta.id, branch, w.path);
+        for (const w of writes) markAgentPresence(meta.id, branch, w.path, agentAuthor);
         const reseed: string[] = [];
         for (const w of writes) {
           if (!w.live) { store.writeFile(meta.id, branch, w.path, w.next); reseed.push(w.path); continue; }
@@ -787,7 +789,7 @@ export function registerTools(server: McpServer, identity: McpIdentity, ctx: Too
         // whole-tree commit would sign them as Claude (and expose them to the
         // session toast's revert). They reach history through the normal
         // autosave debounce instead.
-        const commit = await commitAgentWrite(meta.id, branch, writes.map((w) => ({ path: w.path, before: w.before, after: w.next })), cleanCommitMessage(message, 'Update files'));
+        const commit = await commitAgentWrite(meta.id, branch, writes.map((w) => ({ path: w.path, before: w.before, after: w.next })), cleanCommitMessage(message, 'Update files'), agentAuthor);
         // See write_file: the first .tex of a rootless project becomes the root.
         const firstTex = writes.find((w) => /\.tex$/i.test(w.path))?.path;
         const newRoot = firstTex ? await adoptRootIfUnset(meta.id, branch, firstTex) : undefined;
@@ -949,7 +951,7 @@ export function registerTools(server: McpServer, identity: McpIdentity, ctx: Too
         // the commit that holds them instead of guessing.
         // Short hashes, the length head and commit use everywhere else.
         const recent = res.committed ? [] : (await gitops.log(meta.id, branch, 30))
-          .filter((c) => c.author === gitops.AGENT_COMMIT_AUTHOR).slice(0, 5)
+          .filter((c) => gitops.isAgentAuthor(c.author)).slice(0, 5)
           .map((c) => ({ hash: c.hash.slice(0, e.head.length || 7), date: c.date, message: c.message }));
         // "Nothing was waiting", not "everything is committed": after a
         // restart inside the debounce window the ledger is empty while the
@@ -996,7 +998,7 @@ export function registerTools(server: McpServer, identity: McpIdentity, ctx: Too
         // Right before the write, like every write tool: the tint on the
         // appended entry needs the agent in awareness first, and a lookup
         // that finds nothing or a duplicate must not show Claude in the .bib.
-        added = await addReference(meta.id, branch, query, target, 'Claude', () => markAgentPresence(meta.id, branch, target));
+        added = await addReference(meta.id, branch, query, target, agentAuthor, () => markAgentPresence(meta.id, branch, target, agentAuthor));
       } catch (err) {
         // references.ts messages name the upstream and its HTTP status — the
         // user can act on them; a bare network failure (undici's TypeError,

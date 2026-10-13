@@ -99,7 +99,7 @@ export interface LogEntry { hash: string; date: string; message: string; author:
 export interface AgentActivity {
   since: { head: string; at: string } | null;
   head: string;
-  commits: Array<{ hash: string; date: string; message: string; files: string[] }>;
+  commits: Array<{ hash: string; date: string; message: string; files: string[]; author?: string }>;
   commitCount: number;
   fileCount: number;
   truncated: boolean;

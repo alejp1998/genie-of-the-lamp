@@ -43,6 +43,55 @@ export interface RunEvent {
   createdAt: string;
 }
 
+export type ProposalStatus = 'pending' | 'applying' | 'applied' | 'rejected' | 'stale' | 'failed';
+
+export interface ProposalChange {
+  path: string;
+  kind: 'edit' | 'create';
+  edits?: { quote: string; replacement: string; occurrence?: number }[];
+  content?: string;
+}
+
+export interface CompileOutcome {
+  ok: boolean;
+  errorsTotal: number;
+  errors: { file: string | null; line: number | null; message: string }[];
+  timedOut?: boolean;
+}
+
+export interface Proposal {
+  id: string;
+  sessionId: string;
+  runId: string;
+  /** The model's tool call that produced it; the panel draws the card in its place. */
+  toolCallId: string;
+  projectId: string;
+  branch: string;
+  status: ProposalStatus;
+  summary: string;
+  changes: ProposalChange[];
+  /** Unified diff (multi-file, `diff --git` headers) of what Accept would write. */
+  diff: string;
+  added: number;
+  removed: number;
+  /** Git head and per-file versions when the proposal was made. */
+  base: { head: string | null; versions: Record<string, { contentVersion: number; fileVersion: number }> };
+  provider: string;
+  model: string;
+  createdAt: string;
+  decidedBy: string | null;
+  decidedByName: string | null;
+  decidedAt: string | null;
+  commit: string | null;
+  /** Commit author Aldine recorded, e.g. "Ale (via Paper Assistant)". */
+  author: string | null;
+  edited: boolean;
+  reason: string | null;
+  compile: CompileOutcome | null;
+  /** Whether the model has been told the decision (at the start of its next run). */
+  noted: boolean;
+}
+
 export interface AuditEntry {
   userId: string;
   projectId: string;
@@ -85,6 +134,15 @@ export interface Store {
   listEvents(runId: string, afterId?: number): RunEvent[];
   /** Tool activity, notices and errors across a session's runs (no text deltas), for rendering history. */
   listSessionActivity(sessionId: string): RunEvent[];
+
+  createProposal(p: Omit<Proposal, 'createdAt' | 'decidedBy' | 'decidedByName' | 'decidedAt' | 'commit' | 'author' | 'edited' | 'reason' | 'compile' | 'noted' | 'status'>): Proposal;
+  getProposal(id: string): Proposal | null;
+  listProposals(sessionId: string): Proposal[];
+  updateProposal(id: string, patch: Partial<Omit<Proposal, 'id' | 'sessionId' | 'runId' | 'projectId'>>): Proposal | null;
+  /** Decided proposals the model has not been told about yet. */
+  unnotedDecisions(sessionId: string): Proposal[];
+  /** Proposals still awaiting review count against new runs of the same session. */
+  countPending(sessionId: string): number;
 
   audit(e: AuditEntry): void;
   listAudit(filter: { projectId?: string; sessionId?: string; limit?: number }): AuditRecord[];

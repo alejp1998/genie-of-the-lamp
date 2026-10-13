@@ -22,6 +22,8 @@ export interface McpIdentity {
    *  caller is the operator, so this is what keeps one visitor's typesets
    *  from spending everyone's budget on a shared-token instance. */
   ip?: string;
+  /** Agent label from X-Aldine-Agent-Label: writes commit as "<user> (via <label>)". */
+  agentLabel?: string | null;
 }
 
 /** Key for the typeset budget and the compile gates: the account, else the

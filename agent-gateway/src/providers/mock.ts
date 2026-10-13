@@ -8,7 +8,27 @@ export interface MockTurn {
 
 export type MockScript = (messages: ChatMessage[]) => MockTurn;
 
-const DIRECTIVE = /\[\[tool:([a-z_]+)\s*(\{[\s\S]*?\})?\]\]/g;
+/** `[[tool:name {json}]]` directives; the JSON may nest, so each candidate end is tried until one parses. */
+export function parseDirectives(text: string): { name: string; input: unknown }[] {
+  const out: { name: string; input: unknown }[] = [];
+  const open = /\[\[tool:([a-z_]+)\s*/g;
+  for (let m = open.exec(text); m; m = open.exec(text)) {
+    const start = m.index + m[0].length;
+    let input: unknown = {};
+    let end = text.indexOf(']]', start);
+    if (end < 0) break;
+    if (text[start] === '{') {
+      let parsed = false;
+      for (let e = end; e >= 0; e = text.indexOf(']]', e + 1)) {
+        try { input = JSON.parse(text.slice(start, e)); end = e; parsed = true; break; } catch { /* try the next ]] */ }
+      }
+      if (!parsed) input = { __invalid_json: text.slice(start, end) };
+    }
+    out.push({ name: m[1], input });
+    open.lastIndex = end + 2;
+  }
+  return out;
+}
 
 /**
  * Default script, deterministic so e2e can drive it from the chat box:
@@ -24,12 +44,7 @@ export const directiveScript: MockScript = (messages) => {
     return { text: `${r.isError ? 'The tool failed' : 'Done'}: ${r.content.slice(0, 160)}` };
   }
   const text = last.blocks.filter((b) => b.type === 'text').map((b) => (b as { text: string }).text).join('\n');
-  const calls: { name: string; input: unknown }[] = [];
-  for (const m of text.matchAll(DIRECTIVE)) {
-    let input: unknown = {};
-    try { input = m[2] ? JSON.parse(m[2]) : {}; } catch { input = { __invalid_json: m[2] }; }
-    calls.push({ name: m[1], input });
-  }
+  const calls = parseDirectives(text);
   if (calls.length) return { text: 'Working on it.', toolCalls: calls };
   const ask = text.replace(/<editor_context>[\s\S]*?<\/editor_context>/, '').trim();
   return { text: `Mock reply to: ${ask.slice(0, 200)}` };
